@@ -47,7 +47,7 @@ QEMU 中的 `-M ps2` 机型是本项目实现的 PS2 系统模拟，也是“已
 
 | 文件 | 内容 | 章节 |
 |---|---|---|
-| `pc-bios/ps2-lite-bios/` | 用 `-kernel` 引导 Linux 时放入 ROM0 的精简 BIOS（本项目自写）。它在真实的 R3000A 上运行 IOP 内核，提供 SIF 命令与 RPC 服务；`sif.c` 为其中的 SIF 部分；`reset.S`、`romdir.S`、`lite-bios.lds`、`ee.S`、`iop_entry.S`、`iop_kernel.c`、`services.c`、`irx.c` 为复位分流、ROMDIR、IOP 内核与 IRX 链接器 | [第 11 章](/chapters/11-sif)、[第 15 章](/chapters/15-boot) |
+| `pc-bios/ps2-lite-bios/` | 用 `-kernel` 引导 Linux 时放入 ROM0 的精简 BIOS（本项目自写）。它在真实的 R3000A 上运行 IOP 内核，提供 SIF 命令与 RPC 服务；`sif.c` 为其中的 SIF 部分；`reset.S`、`romdir.S`、`lite-bios.lds`、`ee.S`、`iop_entry.S`、`iop_kernel.c`、`services.c`、`irx.c` 为复位分流、ROMDIR、IOP 内核与 IRX 链接器 | [第 11 章](/chapters/11-sif)、[第 15 章](/chapters/15-boot)、[第 16 章](/chapters/16-linux) |
 | `tests/qtest/ps2-test.c` | PS2 机型的 qtest 用例，例如 `ps2/memory-map`、`ps2/scratchpad`、`ps2/sbus`、`ps2/cop0`、`ps2/fpu`、`ps2/mmi`、`ps2/irq`、`ps2/dmac/spr`、`ps2/vif0`、`ps2/cop2`、`ps2/gif`、`ps2/gs/field`、`ps2/sif-ee`、`ps2/sif-iop`、`ps2/sif-dma`、`ps2/lite-bios/sif`、`ps2/iop-intc`、`ps2/iop-dma`、`ps2/iop-rcnt`、`ps2/iop-ssbus`、`ps2/prid-split`、`ps2/cdvd/ncmd`、`ps2/cdvd/scmd`、`ps2/sio2`、`ps2/spu2`、`ps2/spu2/dma`、`ps2/dev9/intr`、`ps2/mch`、`ps2/dve`、`ps2/rom`、`ps2/boot/bios`、`ps2/boot/bios-large`、`ps2/boot/none`、`ps2/boot/bad`、`ps2/boot/no-romver`、`ps2/boot/elf`、`ps2/boot/lite-bios-wait`、`ps2/boot/lite-bios-bad`、`ps2/cdvd/files`、`ps2/cdvd/elf`、`ps2/lite-bios/irx`、`ps2/r5900-addr`、`ps2/mmi/ops`、`ps2/sio2/dma` | 第 2～15 章各“QEMU 模型说明”一节 |
 | `tests/qtest/r3000a-test.c` | R3000A CPU 的 qtest 用例 `r3000a/cpu`（在 Malta 板上以 `-cpu R3000A` 运行），覆盖 COP0 与异常入口 | [第 12 章](/chapters/12-iop) |
 
@@ -126,7 +126,7 @@ QEMU 建模记录 `ps2-model.md`（项目内部记录，未随本手册发布）
 | 资料 | 性质 | 用途 | 章节 |
 |---|---|---|---|
 | [DobieStation](https://github.com/PSI-Rockin/DobieStation) | 开源 PS2 模拟器，GPLv3 | QEMU 建模时作为 PCSX2 之外的另一个低层模拟实现，用于交叉核对；正文没有逐条引用其行号 | 全书 |
-| frno7/linux（Fredrik Noring 的 PS2 Linux 移植，基于 Linux 5.4，<https://github.com/frno7/linux>） | 开源内核移植，GPLv2 | 精简 BIOS 需要提供的 SIF 握手与 RPC 服务（`sif_init` 的命令顺序、HEAP、LOADFILE）；EE SIO 作为控制台、以查询方式工作；作为“经 Linux 启动验证”的被测软件 | [第 11 章](/chapters/11-sif)、[第 14 章](/chapters/14-peripherals)、[第 15 章](/chapters/15-boot) |
+| frno7/linux（Fredrik Noring 的 PS2 Linux 移植，基于 Linux 5.4，<https://github.com/frno7/linux>） | 开源内核移植，GPLv2 | 精简 BIOS 需要提供的 SIF 握手与 RPC 服务（`sif_init` 的命令顺序、HEAP、LOADFILE）；EE SIO 作为控制台、以查询方式工作；作为“经 Linux 启动验证”的被测软件 | [第 11 章](/chapters/11-sif)、[第 14 章](/chapters/14-peripherals)、[第 15 章](/chapters/15-boot)、[第 16 章](/chapters/16-linux) |
 | Rodrigo Copetti，[《PlayStation 2 架构》](https://www.copetti.org/zh-hans/writings/consoles/playstation-2/) | 架构科普文章 | 本手册的章节结构参照该文；插图全部重新绘制 | [第 1 章](/chapters/01-overview) |
 | *Open Host Controller Interface Specification for USB*，Release 1.0a | USB 主控制器的公开规范 | IOP 一侧 USB 主控制器（OHCI）的寄存器定义，本手册不重复列出 | [第 14 章](/chapters/14-peripherals) |
 | IEEE 754 | 浮点数标准 | 说明 R5900 COP1 与 VU 的浮点格式及其与标准的差异 | [第 3 章](/chapters/03-ee-core)、[第 7 章](/chapters/07-vpu) |

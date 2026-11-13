@@ -63,7 +63,10 @@ export default defineConfig({
       },
       {
         text: '启动',
-        items: [{ text: '15 启动流程', link: '/chapters/15-boot' }]
+        items: [
+          { text: '15 启动流程', link: '/chapters/15-boot' },
+          { text: '16 运行 Linux', link: '/chapters/16-linux' }
+        ]
       },
       {
         text: '附录',

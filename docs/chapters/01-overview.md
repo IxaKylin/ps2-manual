@@ -57,7 +57,7 @@ PS2 的设计核心是让数据在各单元之间以 DMA 方式流动，CPU 只�
 | 音频：SPU2 | [第 14 章](/chapters/14-peripherals) |
 | I/O：IOP 与 SIF | [第 11 章](/chapters/11-sif)、[第 12 章](/chapters/12-iop) |
 | I/O：光驱、外设与扩展接口 | [第 13 章](/chapters/13-cdvd)、[第 14 章](/chapters/14-peripherals) |
-| 操作系统：BIOS 与引导 | [第 15 章](/chapters/15-boot) |
+| 操作系统：BIOS 与引导 | [第 15 章](/chapters/15-boot)、[第 16 章](/chapters/16-linux) |
 
 ## 1.5 QEMU 模型覆盖情况
 

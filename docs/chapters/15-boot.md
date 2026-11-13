@@ -207,7 +207,7 @@ IOPKERN 是名为“IOP_lite_kernel”的 IRX 外壳，导出表声明 loadcore�
 
 IOP 内核依次初始化中断管理、堆、定时报警与空闲线程、IRX 链接器与 SIF，注册 HEAP（`0x80000003`）与 LOADFILE（`0x80000006`）两个 RPC 服务器，然后完成 SIF 握手（15.5 节）。EE 跳到 Linux 入口后，Linux 的 `sif_init` 发 RESET_CMD 使 IOP 重新引导，再发 INIT_CMD 建立命令层与 RPC 层；之后 Linux 经 LOADFILE 把 6 个 IRX 模块送到 IOP，由 ps2-lite-bios 的链接器重定位并在真实的 R3000A 上运行。启动时 Linux 输出的“sif: Failed to patch IOP with -2”是因为 ROM0 中没有 MODLOAD，不影响运行。
 
-已经验证的 Linux 工作负载：进入 shell，运行 ps2gl-cubes 与 Descent，用 `modprobe gamepad` 加载 gamepad.irx <Status s="verified" />。
+已经验证的 Linux 工作负载：进入 shell，运行 ps2gl-cubes 与 Descent，用 `modprobe gamepad` 加载 gamepad.irx <Status s="verified" />。Linux 一侧从内核入口到运行图形程序的完整过程、日志与截图见[第 16 章](/chapters/16-linux)。
 
 ### 15.7.3 机器属性
 

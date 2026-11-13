@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 900" width="960" height="900" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .nb{font-size:13px;font-weight:700;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .eb{fill:#ffffff;stroke:#2f6fb2;stroke-width:1.3}
+    .ib{fill:#ffffff;stroke:#2e8b57;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 16-1 QEMU 中 Linux 的启动流程</text>
+  <text x="24" y="54" class="s">竖向箭头：各处理器内的执行顺序；横跨 SIF 列的箭头：标志寄存器写入或 SIF DMA，箭头指向接收方。</text>
+  <text x="24" y="68" class="s">左列前三步与右列前三步为 ps2-lite-bios 的代码，其余为 Linux 内核、initramfs 与硬盘上的根文件系统。</text>
+
+  <rect x="24" y="122" width="400" height="766" fill="#f7fafd" stroke="#c9d9ec" stroke-width="1"/>
+  <rect x="432" y="122" width="120" height="766" fill="#fafafb" stroke="#dcdee2" stroke-width="1"/>
+  <rect x="560" y="122" width="376" height="766" fill="#f6fbf8" stroke="#c4e2cf" stroke-width="1"/>
+
+  <rect x="24" y="76" width="400" height="46" rx="8" class="ee"/>
+  <text x="224" y="96" text-anchor="middle" class="h">EE（R5900）</text>
+  <text x="224" y="113" text-anchor="middle" class="s">ps2-lite-bios EE 部分 → Linux 内核与用户程序</text>
+  <rect x="432" y="76" width="120" height="46" rx="8" fill="#f4f5f7" stroke="#3a4250" stroke-width="2"/>
+  <text x="492" y="96" text-anchor="middle" class="h">SIF</text>
+  <text x="492" y="113" text-anchor="middle" class="s">标志寄存器与 DMA</text>
+  <rect x="560" y="76" width="376" height="46" rx="8" class="iop"/>
+  <text x="748" y="96" text-anchor="middle" class="h">IOP（R3000A）</text>
+  <text x="748" y="113" text-anchor="middle" class="s">ps2-lite-bios IOP 内核 → Linux 送来的 IRX 模块</text>
+
+  <!-- row 1 -->
+  <rect x="40" y="138" width="368" height="50" rx="6" class="eb"/>
+  <text x="54" y="158" class="nb">① 复位，PRId ≥ 0x100 → ee_start</text>
+  <text x="54" y="177" class="s">从 0xBFC00000 开始；SR = 0x10410000</text>
+  <rect x="576" y="138" width="344" height="50" rx="6" class="ib"/>
+  <text x="590" y="158" class="nb">① 复位，PRId &lt; 0x100 → iop_start</text>
+  <text x="590" y="177" class="s">把 IOP 内核复制到 IOP 内存 0x1000，清 BSS</text>
+
+  <!-- row 2 -->
+  <rect x="40" y="214" width="368" height="50" rx="6" class="eb"/>
+  <text x="54" y="234" class="nb">② 循环读 SMFLAG（0xB000F230）</text>
+  <text x="54" y="253" class="s">等待 BOOTEND 置位</text>
+  <rect x="576" y="214" width="344" height="66" rx="6" class="ib"/>
+  <text x="590" y="234" class="nb">② IOP 内核初始化</text>
+  <text x="590" y="253" class="s">中断管理、堆、定时报警、IRX 链接器、SIF；</text>
+  <text x="590" y="269" class="s">注册 HEAP、LOADFILE 两个 RPC 服务器</text>
+
+  <!-- row 3 -->
+  <rect x="40" y="306" width="368" height="50" rx="6" class="eb"/>
+  <text x="54" y="326" class="nb">③ 读出 ROM0 偏移 0x48 的 ee_entry，跳转</text>
+  <text x="54" y="345" class="s">ee_entry 由板级代码写入，即 vmlinux 的入口</text>
+  <rect x="576" y="306" width="344" height="66" rx="6" class="ib"/>
+  <text x="590" y="326" class="nb">③ sif_boot</text>
+  <text x="590" y="345" class="s">写 SUBADDR；SMFLAG 先置位 SIFINIT|CMDINIT，</text>
+  <text x="590" y="361" class="s">再置位 BOOTEND</text>
+  <line x1="576" y1="331" x2="410" y2="331" class="ln" marker-end="url(#a)"/>
+  <text x="492" y="323" text-anchor="middle" class="b">SMFLAG</text>
+
+  <!-- row 4 -->
+  <rect x="40" y="382" width="368" height="82" rx="6" class="eb"/>
+  <text x="54" y="402" class="nb">④ 内核早期初始化</text>
+  <text x="54" y="421" class="s">读 rom0 的 ROMDIR（6 个文件）与 ROMVER 0230；</text>
+  <text x="54" y="437" class="s">按 ROMVER ≥ 1.10 用 S 命令读机型：SCPH-50004；</text>
+  <text x="54" y="453" class="s">EE SIO 控制台 ttyS0、GS 帧缓冲 fb0、启动 /init</text>
+  <text x="590" y="418" class="s">（IOP 空闲线程忙等，等待 SIF 命令）</text>
+
+  <!-- row 5 -->
+  <rect x="40" y="490" width="368" height="66" rx="6" class="eb"/>
+  <text x="54" y="510" class="nb">⑤ /init：modprobe sif → sif_init</text>
+  <text x="54" y="529" class="s">写 MAINADDR，发 RESET_CMD 让 IOP 重新引导；</text>
+  <text x="54" y="545" class="s">再发 INIT_CMD 0/1，建立命令层与 RPC 层</text>
+  <rect x="576" y="490" width="344" height="66" rx="6" class="ib"/>
+  <text x="590" y="510" class="nb">⑤ RESET_CMD：停 SIF1、清空 SIF0，重新引导</text>
+  <text x="590" y="529" class="s">重复 ①～③（第二次 sif_boot）；</text>
+  <text x="590" y="545" class="s">INIT_CMD 1 以 WRITE_SREG 应答</text>
+  <line x1="410" y1="512" x2="574" y2="512" class="ln" marker-end="url(#a)"/>
+  <text x="492" y="505" text-anchor="middle" class="b">SIF1 命令</text>
+  <line x1="576" y1="540" x2="410" y2="540" class="ln" marker-end="url(#a)"/>
+  <text x="492" y="533" text-anchor="middle" class="b">BOOTEND</text>
+
+  <!-- row 6 -->
+  <rect x="40" y="582" width="368" height="82" rx="6" class="eb"/>
+  <text x="54" y="602" class="nb">⑥ 驱动请求 IRX 固件</text>
+  <text x="54" y="621" class="s">iop-module、iop-irq、iop-dev9、pata_ps2 读取</text>
+  <text x="54" y="637" class="s">/lib/firmware/ps2/*.irx，经 LOADFILE 的</text>
+  <text x="54" y="653" class="s">mod_buf_load 把模块送到 IOP</text>
+  <rect x="576" y="582" width="344" height="82" rx="6" class="ib"/>
+  <text x="590" y="602" class="nb">⑥ irx_load：重定位并链接内置库</text>
+  <text x="590" y="621" class="s">在 R3000A 上运行 printk、irq、irqrelay、</text>
+  <text x="590" y="637" class="s">dev9、ata；IOP 的打印经 SIF 命令</text>
+  <text x="590" y="653" class="s">进入 Linux 内核日志（“iop: …”）</text>
+  <line x1="410" y1="610" x2="574" y2="610" class="ln" marker-end="url(#a)"/>
+  <text x="492" y="603" text-anchor="middle" class="b">SIF1 RPC</text>
+  <line x1="576" y1="640" x2="410" y2="640" class="ln" marker-end="url(#a)"/>
+  <text x="492" y="633" text-anchor="middle" class="b">SIF0 应答</text>
+
+  <!-- row 7 -->
+  <rect x="40" y="690" width="368" height="66" rx="6" class="eb"/>
+  <text x="54" y="710" class="nb">⑦ 识别硬盘，切换根文件系统</text>
+  <text x="54" y="729" class="s">pata_ps2 以 PIO 方式访问扩展接口上的 ATA 寄存器，</text>
+  <text x="54" y="745" class="s">得到 /dev/sda，switch_root 到其中的 ext4</text>
+
+  <!-- row 8 -->
+  <rect x="40" y="782" width="368" height="90" rx="6" class="eb"/>
+  <text x="54" y="802" class="nb">⑧ 硬盘上的 rcS 与应用程序</text>
+  <text x="54" y="821" class="s">加载 USB OHCI 等驱动，建立 zram 交换区；</text>
+  <text x="54" y="837" class="s">autorun 启动 Descent；在 shell 中运行 ps2gl-cubes；</text>
+  <text x="54" y="853" class="s">两者都经 VU1 与 GS 绘图（图 16-2、16-3）</text>
+
+  <!-- vertical flow -->
+  <line x1="224" y1="188" x2="224" y2="212" class="ln" marker-end="url(#a)"/>
+  <line x1="224" y1="264" x2="224" y2="304" class="ln" marker-end="url(#a)"/>
+  <line x1="224" y1="356" x2="224" y2="380" class="ln" marker-end="url(#a)"/>
+  <line x1="224" y1="464" x2="224" y2="488" class="ln" marker-end="url(#a)"/>
+  <line x1="224" y1="556" x2="224" y2="580" class="ln" marker-end="url(#a)"/>
+  <line x1="224" y1="664" x2="224" y2="688" class="ln" marker-end="url(#a)"/>
+  <line x1="224" y1="756" x2="224" y2="780" class="ln" marker-end="url(#a)"/>
+  <line x1="748" y1="188" x2="748" y2="212" class="ln" marker-end="url(#a)"/>
+  <line x1="748" y1="280" x2="748" y2="304" class="ln" marker-end="url(#a)"/>
+  <line x1="748" y1="372" x2="748" y2="400" class="ln" marker-end="url(#a)"/>
+  <line x1="748" y1="428" x2="748" y2="488" class="ln" marker-end="url(#a)"/>
+  <line x1="748" y1="556" x2="748" y2="580" class="ln" marker-end="url(#a)"/>
+</svg>

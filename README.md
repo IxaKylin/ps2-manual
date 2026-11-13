@@ -35,7 +35,7 @@ node scripts/check-addr.mjs   # 已验证寄存器地址与 QEMU 源码对照（
 
 ## 许可
 
-本仓库的文字、插图与脚本采用 BSD 3-Clause 许可，见 [LICENSE](LICENSE)。`docs/public/img/fig15-3-osdsys-qemu.png`、`fig15-4-osdsys-pcsx2.png` 为 Sony BIOS 菜单画面截图，画面内容的权利归 Sony 所有，不在本许可范围内。
+本仓库的文字、插图与脚本采用 BSD 3-Clause 许可，见 [LICENSE](LICENSE)。`docs/public/img/fig15-3-osdsys-qemu.png`、`fig15-4-osdsys-pcsx2.png` 为 Sony BIOS 菜单画面截图，画面内容的权利归 Sony 所有；`fig16-3-linux-descent.png` 为游戏 Descent 的画面截图，权利归其权利人所有。上述截图不在本许可范围内。
 
 ## 声明
 
