@@ -1,0 +1,432 @@
+# CDVD 控制器（MechaCon 接口）寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# 全部为 8 位寄存器，位于 IOP 物理地址 0x1F402000 起的 256 字节窗口；
+# EE 经 SBUS 窗口在同一物理地址（KSEG1 为 0xBF402000）访问。
+# offset 为相对于 0x1F402000 的偏移，与 QEMU include/hw/misc/ps2_cdvd.h 的
+# PS2_CDVD_xxx 常量一致。同一地址读写含义不同的寄存器分成两项列出。
+block: cdvd
+title: CDVD 控制器
+page: /chapters/13-cdvd
+base: 0x1F402000
+size: 0x100
+bus: IOP 总线
+access_size: 8 位（QEMU 中 16/32 位访问被忽略，读出 0）
+width: 8
+status: verified
+qemu:
+  files: [include/hw/misc/ps2_cdvd.h, hw/misc/ps2_cdvd.c, hw/mips/ps2.c]
+registers:
+  - name: N_COMMAND
+    addr: 0x1F402004
+    offset: 0x04
+    access: R/W
+    reset: 0x00
+    brief: N 命令寄存器：写入启动 N 命令，读出当前 N 命令
+    desc: >-
+      写入一个字节即向驱动器发出一条 N 命令（异步命令），命令码见表 13-1。参数须在写本寄存器
+      之前写入 N_PARAM。读出为最近一次被接受的命令码。驱动器未就绪（N_READY.READY = 0）时
+      写入的命令不被接受，本寄存器保持原值，ERROR 置为 0x13。
+    ops:
+      - 读 N_READY，确认 READY = 1、BUSY = 0。
+      - 按命令要求向 N_PARAM 依次写入参数字节。
+      - 写 N_COMMAND = 命令码，然后等待 CDVD 中断（CDVD_I_STAT.DONE）。
+    notes:
+      - QEMU 中没有光盘：0x00（NOP）以外的命令一律以错误 0x12 结束；NOP 带参数时以错误 0x22 结束。每条命令都立即完成并置 CDVD_I_STAT.DONE。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1909-1935", "ps2tek §CDVD I/O Ports", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:6067-6071", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_ncmd）"]
+
+  - name: N_READY
+    addr: 0x1F402005
+    offset: 0x05
+    access: RO
+    reset: 0x4C
+    brief: N 命令状态（就绪、忙、出错）
+    desc: >-
+      读 0x1F402005 得到 N 命令通道的状态。cdvdman 在发出 N 命令前要求第 7:6 位为 0b01（就绪且不忙）。
+      写同一地址是 N_PARAM。
+    fields:
+      - name: ERROR
+        bits: "0"
+        reset: 0
+        desc: 最近一条 N 命令出错。新命令被接受且成功时清零。
+        values: { "0": "无错误", "1": "出错，原因见 ERROR 寄存器" }
+      - { bits: "1", name: 保留, reset: 0, desc: 含义不明，QEMU 读出为 0 }
+      - name: DEV9CON
+        bits: "2"
+        reset: 1
+        status: unimplemented
+        desc: DEV9 设备（硬盘 / 网络适配器）已连接。QEMU 恒为 1。
+      - name: MECHA_INIT
+        bits: "3"
+        reset: 1
+        status: unimplemented
+        desc: MechaCon 已完成初始化（PCSX2 的命名；ps2tek 标为含义不明）。QEMU 恒为 1。
+      - name: TEST
+        bits: "4"
+        reset: 0
+        status: unimplemented
+        desc: 测试模式（ps2tek）。QEMU 读出为 0。
+      - name: PWOFF
+        bits: "5"
+        reset: 0
+        status: unimplemented
+        desc: 关机就绪（ps2tek、PCSX2）。QEMU 读出为 0。
+      - name: READY
+        bits: "6"
+        reset: 1
+        desc: 驱动器就绪，可以接受 N 命令。托盘打开时为 0。
+        values: { "0": "未就绪", "1": "就绪" }
+      - name: BUSY
+        bits: "7"
+        reset: 0
+        status: unimplemented
+        desc: 正在执行 N 命令。QEMU 中命令立即完成，本位恒为 0。
+    notes:
+      - 复位值 0x4C 由 QEMU 的托盘关闭、无光盘状态得出（qtest 常量 CDVD_READY）。
+    source: ["PCSX2 pcsx2/CDVD/CDVD_internal.h:86-94", "ps2tek §CDVD I/O Ports", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:6003", "QEMU include/hw/misc/ps2_cdvd.h（PS2_CDVD_READY_xxx）"]
+
+  - name: N_PARAM
+    addr: 0x1F402005
+    offset: 0x05
+    access: WO
+    brief: N 命令参数 FIFO
+    desc: >-
+      写 0x1F402005 把一个字节压入 N 命令参数 FIFO，必须在写 N_COMMAND 之前完成。多字节参数按
+      小端序逐字节写入。FIFO 深度 16 字节；命令发出后 FIFO 清空。
+    notes:
+      - QEMU 与 PCSX2 相同：写入第 17 个字节时 FIFO 先清空，该字节成为第 1 个参数（记录 LOG_GUEST_ERROR）。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:2352-2365", "ps2tek §CDVD I/O Ports", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_push）"]
+
+  - name: ERROR
+    addr: 0x1F402006
+    offset: 0x06
+    access: R/C
+    reset: 0x00
+    brief: N 命令错误码，读出后清零
+    desc: >-
+      最近一条出错的 N 命令的错误码，读出后清零。出错时 N_READY.ERROR 同时置 1。
+      写同一地址是 HOWTO。
+    fields:
+      - name: CODE
+        bits: "7:0"
+        reset: 0
+        desc: 错误码。下表只列出 QEMU 会给出的值。
+        values: { "0x00": "无错误", "0x12": "没有光盘（需要光盘的命令）", "0x13": "驱动器未就绪", "0x22": "参数个数错误（NOP 带参数）" }
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1711-1717", "PCSX2 pcsx2/CDVD/CDVD.cpp:1916", "QEMU hw/misc/ps2_cdvd.c:26-29"]
+
+  - name: HOWTO
+    addr: 0x1F402006
+    offset: 0x06
+    access: WO
+    status: unimplemented
+    brief: 读取方式设置（配合 DMA 通道 3）
+    desc: >-
+      写 0x1F402006 设定扇区数据经 IOP DMA 通道 3 送出的方式。cdvdman 在 CD 读取时写 128，
+      DVD 读取时写 140；位的含义没有可靠来源。
+    notes:
+      - QEMU 只保存写入值，不影响任何行为；读同一地址得到的是 ERROR。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:2367-2371", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:6540-6547", "QEMU hw/misc/ps2_cdvd.c（howto）"]
+
+  - name: BREAK
+    addr: 0x1F402007
+    offset: 0x07
+    access: R/W
+    status: unimplemented
+    brief: 中止当前 N 命令
+    desc: 写入任意值请求中止正在执行的 N 命令。读出为 0。
+    notes:
+      - QEMU 中 N 命令立即完成，写入被忽略，读出为 0。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:2373-2384", "ps2tek §CDVD I/O Ports", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_writeb）"]
+
+  - name: CDVD_I_STAT
+    addr: 0x1F402008
+    offset: 0x08
+    access: R/W1C
+    reset: 0x00
+    brief: CDVD 中断原因，写 1 清零
+    desc: >-
+      CDVD 向 IOP INTC 第 2 号中断源申请中断时，本寄存器给出原因。写 1 清除对应位。
+      某一位由 0 变为 1 时产生一次中断请求；该位尚未清除时同一原因再次发生不会再次申请中断。
+    fields:
+      - name: DONE
+        bits: "0"
+        reset: 0
+        desc: N 命令结束（无论成功或出错）。PCSX2 与 QEMU 用本位；ps2tek 认为是“数据就绪”，命令完成为第 1 位。
+      - name: CMD_CMPL
+        bits: "1"
+        reset: 0
+        status: unimplemented
+        desc: 命令完成（ps2tek）。cdvdman 的中断处理程序在第 2 位为 0 时向本位写 1。QEMU 从不置位。
+      - name: POWER_OFF
+        bits: "2"
+        reset: 0
+        status: unimplemented
+        desc: 按下电源键（关机请求）。QEMU 从不置位。
+      - name: EJECT
+        bits: "3"
+        reset: 0
+        desc: 托盘打开（S 命令 0x06 参数 0）。
+      - name: BS_POWER
+        bits: "4"
+        reset: 0
+        status: unimplemented
+        desc: BS 电源检测（含义不明，ps2tek）。QEMU 从不置位。
+      - { bits: "7:5", name: 保留, reset: 0, desc: 未使用 }
+    ops:
+      - 中断处理程序读 CDVD_I_STAT，按位处理，再把读到的位写回清零。
+      - 然后清 IOP INTC I_STAT 的第 2 位（第 12 章）。
+    notes:
+      - 只有 N 命令和托盘打开会产生中断；S 命令同步完成，不产生中断。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:103-114", "PCSX2 pcsx2/CDVD/CDVD.cpp:2386-2390", "PCSX2 pcsx2/CDVD/CDVD_internal.h:45-52", "ps2tek §CDVD I/O Ports", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:4272-4320", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_set_irq）"]
+
+  - name: WHERE_SEL
+    addr: 0x1F402009
+    offset: 0x09
+    access: WO
+    status: unimplemented
+    brief: 当前位置寄存器的模式选择
+    desc: >-
+      选择 CRT_MINUTE/CRT_SECOND/CRT_FRAME 按哪种光盘格式给出当前位置：0 为 CD-DA，1 为 CD-ROM，
+      2 为 DVD（PCSX2 的说明）。
+    notes:
+      - QEMU 忽略写入。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:3131-3144", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_writeb）"]
+
+  - name: STATUS
+    addr: 0x1F40200A
+    offset: 0x0A
+    access: RO
+    reset: 0x0A
+    brief: 驱动器状态（托盘、主轴、读、暂停、寻道）
+    desc: >-
+      驱动器当前状态。常见取值：0x00 停止，0x01 托盘打开，0x02 主轴旋转，0x06 读取中，
+      0x0A 暂停（就绪、不在读），0x12 寻道中，0x20 异常结束。cdvdman 比较 STATUS 与 STICKY
+      判断托盘状态是否变化过。
+    fields:
+      - name: TRAY
+        bits: "0"
+        reset: 0
+        desc: 托盘状态。
+        values: { "0": "关闭", "1": "打开" }
+      - { bits: "1", name: SPIN, reset: 1, desc: 主轴电机旋转 }
+      - { bits: "2", name: READ, reset: 0, status: unimplemented, desc: 正在读数据扇区。QEMU 没有光盘，从不置位 }
+      - { bits: "3", name: PAUSE, reset: 1, desc: 暂停（就绪但不在读） }
+      - { bits: "4", name: SEEK, reset: 0, status: unimplemented, desc: 正在寻道。QEMU 只在关托盘的瞬间经过 0x12，读不到此位，但它进入 STICKY }
+      - { bits: "5", name: EMERGENCY, reset: 0, status: unimplemented, desc: 异常结束。QEMU 从不置位 }
+      - { bits: "7:6", name: 保留, reset: 0, desc: 含义不明 }
+    notes:
+      - QEMU 中托盘关闭时 STATUS = 0x0A（无光盘也报告暂停），托盘打开时为 0x01。写入被忽略。
+    source: ["PCSX2 pcsx2/CDVD/CDVD_internal.h:54-72", "ps2tek §CDVD I/O Ports", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:6097-6148", "QEMU include/hw/misc/ps2_cdvd.h（PS2_CDVD_STATUS_xxx）"]
+
+  - name: STICKY
+    addr: 0x1F40200B
+    offset: 0x0B
+    access: RO
+    reset: 0x1B
+    brief: 累积驱动器状态
+    desc: >-
+      位定义同 STATUS，但每次状态变化都把新状态或入本寄存器，因此保留了曾经出现过的所有状态位。
+      S 命令 0x05 把它重新装入当前状态。
+    notes:
+      - QEMU 复位时依次经过托盘打开、停止、寻道、暂停，因此复位值为 0x01 | 0x12 | 0x0A = 0x1B。
+      - QEMU 与 PCSX2 相同，S 命令 0x05 只把 STATUS 的托盘位（第 0 位）装入 STICKY，其余位清零；ps2tek 说是装入整个 STATUS。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1730-1734", "PCSX2 pcsx2/CDVD/CDVD.cpp:2494-2501", "ps2tek §CDVD I/O Ports", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_set_status）"]
+
+  - name: CRT_MINUTE
+    addr: 0x1F40200C
+    offset: 0x0C
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 当前位置：分（BCD），QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1735-1745", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: CRT_SECOND
+    addr: 0x1F40200D
+    offset: 0x0D
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 当前位置：秒（BCD，含 2 秒引导区），QEMU 恒读 0x02
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1739-1741", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: CRT_FRAME
+    addr: 0x1F40200E
+    offset: 0x0E
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 当前位置：帧（BCD），QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1743-1745", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: TYPE
+    addr: 0x1F40200F
+    offset: 0x0F
+    access: RO
+    reset: 0x00
+    status: unimplemented
+    brief: 光盘类型，QEMU 恒为 0（无光盘）
+    desc: 驱动器识别出的光盘类型。
+    fields:
+      - name: TYPE
+        bits: "7:0"
+        reset: 0
+        desc: 光盘类型（ps2tek）。QEMU 恒读 0，写入被忽略。
+        values: { "0x00": "无光盘", "0x01": "检测中", "0x02": "检测中（CD）", "0x03": "检测中（DVD）", "0x04": "检测中（双层 DVD）", "0x10": "PS1 CD", "0x11": "PS1 CD-DA", "0x12": "PS2 CD", "0x13": "PS2 CD-DA", "0x14": "PS2 DVD", "0xFD": "音乐 CD（CD-DA）", "0xFE": "DVD 视频", "0xFF": "非法光盘" }
+    notes:
+      - qtest ps2/cdvd/ncmd 检查读出为 0，但这是常量，不是模拟结果。
+    source: ["ps2tek §CDVD I/O Ports", "PCSX2 pcsx2/CDVD/CDVD.cpp:1747-1757", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: SPEED
+    addr: 0x1F402013
+    offset: 0x13
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 当前主轴速度，QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1759-1777", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: PS1_SPEED
+    addr: 0x1F402014
+    offset: 0x14
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: PS1 模式光驱速度（标准 / 快速），QEMU 忽略写入
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:2403-2411", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_writeb）"]
+
+  - name: RSV
+    addr: 0x1F402015
+    offset: 0x15
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 保留（与 PSX DESR 有关），普通 PS2 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1779-1781", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: S_COMMAND
+    addr: 0x1F402016
+    offset: 0x16
+    access: R/W
+    reset: 0x00
+    brief: S 命令寄存器：写入执行 S 命令，读出当前 S 命令
+    desc: >-
+      写入一个字节即向 MechaCon 发出一条 S 命令（同步命令），命令码见表 13-2（0x03 的子命令见表 13-3）。参数须先写入
+      S_PARAM。命令执行完后，结果字节从 S_RESULT 逐个读出。读本寄存器得到最近一次写入的命令码。
+    ops:
+      - 读 S_STATUS。cdvdman 在 BUSY = 1 时按异常结束处理，否则一直等到 EMPTY = 1；EMPTY = 0 时先把残留结果读空是建议做法，不是 cdvdman 的行为。
+      - 向 S_PARAM 依次写入参数字节。
+      - 写 S_COMMAND = 命令码。
+      - 等待 S_STATUS.BUSY = 0，然后在 S_STATUS.EMPTY = 0 期间反复读 S_RESULT。
+    notes:
+      - QEMU 在写 S_COMMAND 时立即算出结果，不出现忙状态；参数 FIFO 在命令执行后清空。
+      - QEMU 不认识的命令返回 1 字节 0x80，并记录 LOG_UNIMP。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:2419-2433", "ps2tek §CDVD I/O Ports", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:5105-5169", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_scmd）"]
+
+  - name: S_STATUS
+    addr: 0x1F402017
+    offset: 0x17
+    access: RO
+    reset: 0x40
+    brief: S 命令状态（结果是否可读、忙）
+    desc: 读 0x1F402017 得到 S 命令通道状态。写同一地址是 S_PARAM。
+    fields:
+      - { bits: "5:0", name: 保留, reset: 0, desc: 含义不明，QEMU 读出为 0 }
+      - name: EMPTY
+        bits: "6"
+        reset: 1
+        desc: 结果缓冲区空。
+        values: { "0": "还有结果字节可读", "1": "没有结果" }
+      - name: BUSY
+        bits: "7"
+        reset: 0
+        status: unimplemented
+        desc: MechaCon 正在执行 S 命令。QEMU 恒为 0。
+    source: ["ps2tek §CDVD I/O Ports", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:5105-5169", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: S_PARAM
+    addr: 0x1F402017
+    offset: 0x17
+    access: WO
+    brief: S 命令参数 FIFO
+    desc: >-
+      写 0x1F402017 把一个字节压入 S 命令参数 FIFO，必须在写 S_COMMAND 之前完成。FIFO 深度 16 字节，
+      写入第 17 个字节时先清空。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:3085-3098", "ps2tek §CDVD I/O Ports", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_push）"]
+
+  - name: S_RESULT
+    addr: 0x1F402018
+    offset: 0x18
+    access: RO
+    reset: 0x00
+    brief: S 命令结果，逐字节读出
+    desc: >-
+      每读一次取出一个结果字节。结果读完后 S_STATUS.EMPTY 变为 1，再读得到 0。
+      多数命令的第 1 个结果字节是状态（0 表示成功）。
+    notes:
+      - QEMU 的结果缓冲区为 16 字节；写本地址被忽略（QEMU 中称 S_DATA）。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1683-1697", "ps2tek §CDVD I/O Ports", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: KEY_A
+    addr: 0x1F402020
+    offset: 0x20
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 光盘密钥字节 0–4（0x1F402020–0x1F402024），QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1794-1803", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: KEY_B
+    addr: 0x1F402028
+    offset: 0x28
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 光盘密钥字节 5–9（0x1F402028–0x1F40202C），QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1805-1815", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: KEY_C
+    addr: 0x1F402030
+    offset: 0x30
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 光盘密钥字节 10–14（0x1F402030–0x1F402034），QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1817-1827", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: KEY_VALID
+    addr: 0x1F402038
+    offset: 0x38
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 密钥有效标志（密钥字节 15），QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1829-1832", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: KEY_XOR
+    addr: 0x1F402039
+    offset: 0x39
+    access: RO
+    status: unimplemented
+    nodetail: true
+    brief: 密钥异或值，QEMU 读 0
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1834-1837", "QEMU hw/misc/ps2_cdvd.c（ps2_cdvd_readb）"]
+
+  - name: DEC_SET
+    addr: 0x1F40203A
+    offset: 0x3A
+    access: R/W
+    reset: 0x00
+    status: unimplemented
+    brief: 扇区数据解密设置（异或、循环移位）
+    desc: >-
+      设定驱动器对读出的扇区数据做何种变换：异或（使用 KEY_XOR）以及循环移位。
+      第 6:4 位为移位量，第 1:0 位为两个允许位。两个来源对第 0、1 位的分配相反：PCSX2 以第 0 位为异或、
+      第 1 位为移位；ps2sdk 的 sceCdDecSet 以第 1 位为异或、第 0 位为移位，本手册不作判断。
+    fields:
+      - { bits: "1:0", name: EN, reset: 0, desc: 异或允许与移位允许，分配见上文 }
+      - { bits: "3:2", name: 保留, reset: 0, desc: 写 0 }
+      - { bits: "6:4", name: SHIFT, reset: 0, desc: 循环移位量 }
+      - { bits: "7", name: 保留, reset: 0, desc: 写 0 }
+    notes:
+      - QEMU 只保存写入值并可读回，不做任何解密（没有光盘数据）。
+    source: ["PCSX2 pcsx2/CDVD/CDVD.cpp:1088-1092", "ps2sdk iop/cdvd/cdvdman/src/cdvdman.c:8468-8474", "QEMU hw/misc/ps2_cdvd.c（dec_set）"]

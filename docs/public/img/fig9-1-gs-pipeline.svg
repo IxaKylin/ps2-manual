@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 610" width="960" height="610" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="610" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 9-1 GS 绘图流水线与显示输出</text>
+  <text x="24" y="58" class="s">箭头表示数据流向；双向箭头表示读—改—写。QEMU 逐像素同步处理，但先做深度测试、后做目的 α 测试（两者只决定是否丢弃像素）。</text>
+
+  <!-- top row: GIF, general registers, setup -->
+  <rect x="24" y="84" width="210" height="82" rx="10" class="gfx"/>
+  <text x="40" y="108" class="h">GIF</text>
+  <text x="40" y="128" class="s">PATH1：VU1 XGKICK</text>
+  <text x="40" y="144" class="s">PATH2：VIF1 DIRECT</text>
+  <text x="40" y="160" class="s">PATH3：DMAC 通道 2 / GIF FIFO</text>
+  <path d="M236 125 H278" class="ln" marker-end="url(#a)"/>
+
+  <rect x="280" y="84" width="210" height="82" rx="10" class="gfx"/>
+  <text x="296" y="108" class="h">一般寄存器</text>
+  <text x="296" y="128" class="s">PRIM、RGBAQ、ST/UV、XYZ2</text>
+  <text x="296" y="144" class="s">上下文 1 / 2：TEX0、FRAME、</text>
+  <text x="296" y="160" class="s">ZBUF、TEST、ALPHA…</text>
+  <path d="M492 125 H534" class="ln" marker-end="url(#a)"/>
+
+  <rect x="536" y="84" width="210" height="82" rx="10" class="gfx"/>
+  <text x="552" y="108" class="h">图元设置 / 光栅化</text>
+  <text x="552" y="128" class="s">顶点队列（最多 3 个顶点）</text>
+  <text x="552" y="144" class="s">XYOFFSET、SCISSOR 裁剪</text>
+  <text x="552" y="160" class="s">颜色 / STQ / Z / F 插值</text>
+
+  <text x="768" y="112" class="s">PRIM.CTXT 选择上下文 1 或 2；</text>
+  <text x="768" y="130" class="s">XYZ2 / XYZF2 触发绘制，</text>
+  <text x="768" y="148" class="s">XYZ3 / XYZF3 只入队列。</text>
+
+  <path d="M641 168 V196" class="ln" marker-end="url(#a)"/>
+
+  <!-- pixel pipeline -->
+  <rect x="24" y="198" width="912" height="104" rx="12" class="gfx"/>
+  <text x="40" y="220" class="h">像素流水线</text>
+
+  <rect x="35" y="230" width="130" height="58" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="47" y="254" class="n">纹理映射</text>
+  <text x="47" y="274" class="s">TEX0 / CLUT / TFX</text>
+  <path d="M166 259 H185" class="ln" marker-end="url(#a)"/>
+
+  <rect x="187" y="230" width="130" height="58" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="199" y="254" class="n">雾化</text>
+  <text x="199" y="274" class="s">FOG / FOGCOL</text>
+  <path d="M318 259 H337" class="ln" marker-end="url(#a)"/>
+
+  <rect x="339" y="230" width="130" height="58" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="351" y="254" class="n">α 测试</text>
+  <text x="351" y="274" class="s">TEST.ATE / ATST</text>
+  <path d="M470 259 H489" class="ln" marker-end="url(#a)"/>
+
+  <rect x="491" y="230" width="130" height="58" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="503" y="254" class="n">目的 α 测试</text>
+  <text x="503" y="274" class="s">TEST.DATE / DATM</text>
+  <path d="M622 259 H641" class="ln" marker-end="url(#a)"/>
+
+  <rect x="643" y="230" width="130" height="58" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="655" y="254" class="n">深度测试</text>
+  <text x="655" y="274" class="s">TEST.ZTE / ZTST</text>
+  <path d="M774 259 H793" class="ln" marker-end="url(#a)"/>
+
+  <rect x="795" y="230" width="130" height="58" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="807" y="254" class="n">α 混合</text>
+  <text x="807" y="274" class="s">ALPHA / FBMSK</text>
+
+  <!-- local memory -->
+  <rect x="24" y="340" width="912" height="110" rx="12" class="mem"/>
+  <rect x="35" y="378" width="130" height="54" rx="6" class="blk" stroke="#c07a1a"/>
+  <text x="47" y="400" class="n">纹理 / CLUT</text>
+  <text x="47" y="420" class="s">TBP0、CBP（块）</text>
+  <text x="200" y="384" class="h">本地存储器 4 MB</text>
+  <text x="200" y="406" class="s">512 页 × 8 KB；帧缓冲、Z 缓冲、纹理与 CLUT 共用同一存储器，</text>
+  <text x="200" y="424" class="s">主机 ↔ 本地传输（BITBLTBUF / TRXDIR / HWREG）也在此读写。</text>
+  <rect x="643" y="378" width="130" height="54" rx="6" class="blk" stroke="#c07a1a"/>
+  <text x="655" y="400" class="n">Z 缓冲</text>
+  <text x="655" y="420" class="s">ZBUF.ZBP（页）</text>
+  <rect x="795" y="378" width="130" height="54" rx="6" class="blk" stroke="#c07a1a"/>
+  <text x="807" y="400" class="n">帧缓冲</text>
+  <text x="807" y="420" class="s">FRAME.FBP（页）</text>
+
+  <path d="M100 376 V290" class="ln" marker-end="url(#a)"/>
+  <path d="M708 290 V376" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path d="M860 290 V376" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path d="M815 376 V320 H556 V290" class="ln" marker-end="url(#a)"/>
+  <text x="566" y="314" class="s">读目的 α</text>
+
+  <!-- PCRTC -->
+  <path d="M820 434 V468 H740 V486" class="ln" marker-end="url(#a)"/>
+  <text x="684" y="474" class="s">读帧缓冲</text>
+  <rect x="420" y="488" width="356" height="108" rx="12" class="gfx"/>
+  <text x="436" y="510" class="h">PCRTC</text>
+  <rect x="436" y="520" width="170" height="30" rx="5" class="blk" stroke="#7a4bb3"/>
+  <text x="446" y="540" class="s">电路 1：DISPFB1/DISPLAY1</text>
+  <rect x="436" y="558" width="170" height="30" rx="5" class="blk" stroke="#7a4bb3"/>
+  <text x="446" y="578" class="s">电路 2：DISPFB2/DISPLAY2</text>
+  <rect x="650" y="520" width="120" height="68" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="658" y="544" class="n">合成</text>
+  <text x="658" y="564" class="s">PMODE、BGCOLOR</text>
+  <text x="658" y="580" class="s">SMODE1/2</text>
+  <path d="M607 535 H648" class="ln" marker-end="url(#a)"/>
+  <path d="M607 573 H648" class="ln" marker-end="url(#a)"/>
+
+  <path d="M778 554 H818" class="ln" marker-end="url(#a)"/>
+  <rect x="820" y="520" width="116" height="68" rx="8" class="ext"/>
+  <text x="832" y="546" class="n">DVE</text>
+  <text x="832" y="566" class="s">视频编码器</text>
+
+  <!-- privileged registers -->
+  <rect x="24" y="488" width="356" height="108" rx="12" class="ee"/>
+  <text x="40" y="510" class="h">特权寄存器（0x12000000）</text>
+  <text x="40" y="532" class="s">EE 经总线直接读写，控制 PCRTC 与中断。</text>
+  <text x="40" y="552" class="s">CSR 事件 &amp; ~IMR → EE INTC 位 0（GS）</text>
+  <text x="40" y="572" class="s">场消隐 → EE INTC 位 2/3，IOP INTC</text>
+  <text x="40" y="588" class="s">SIGNAL / FINISH 写入 → CSR 事件</text>
+  <path d="M382 542 H418" class="ln" marker-end="url(#a)"/>
+</svg>

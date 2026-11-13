@@ -1,0 +1,407 @@
+# VIF0 / VIF1 寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# VIF0 与 VIF1 的寄存器格式相同，这里只描述一次，名称写作 VIFn_xxx，
+# offset 为相对于 VIF 寄存器基地址的偏移：VIF0 为 0x10003800，VIF1 为 0x10003C00
+# （第 7 章表 7-4）。偏移与 QEMU 头文件中的 PS2_VIF_xxx 常量一致。
+# 本块不写 base，以免与两个基地址混淆。
+block: vif
+title: VIF0 / VIF1 寄存器
+page: /chapters/07-vpu
+bus: EE 总线
+access_size: 32 位（64 位访问拆为两次 32 位访问）
+width: 32
+status: verified
+qemu:
+  files: [include/hw/display/ps2_vif.h, hw/display/ps2_vif.c, hw/display/ps2_vu0.c, hw/display/ps2_vu1.c, hw/mips/ps2_ee.c]
+registers:
+  - name: VIFn_STAT
+    offset: 0x000
+    access: RO（VIF1 的 FDR 位可写）
+    reset: 0x00000000
+    brief: VIF 状态（命令状态、停顿原因、双缓冲、FIFO 计数）
+    desc: >-
+      反映 VIF 当前的命令处理状态、停顿原因、MARK 检测、双缓冲选择以及 FIFO 中的数据量。
+      除 VIF1 的 FDR 位外均为只读。QEMU 中 VIF 与 VU 始终处于空闲状态、FIFO 始终为空，
+      因此只有 MRK、DBF 与 FDR 三个位会变化，其余位读出为 0。
+    fields:
+      - name: VPS
+        bits: "1:0"
+        access: RO
+        reset: 0
+        status: unimplemented
+        desc: VIFcode 处理状态。QEMU 中 VIFcode 在写入时立即处理完，读出恒为 0。
+        values: { "0": "空闲", "1": "等待 VIFcode 之后的数据", "2": "正在译码 VIFcode", "3": "正在解压 / 传送数据" }
+      - { bits: "2", name: VEW, access: RO, reset: 0, status: unimplemented, desc: 为 1 表示 VU 正在执行微程序，VIF 等待其结束（MSCAL、FLUSHE 等）。QEMU 中微程序同步执行完毕，读出恒为 0 }
+      - { bits: "3", name: VGW, access: RO, reset: 0, status: unimplemented, desc: 仅 VIF1。为 1 表示 VIF1 正等待 GIF（FLUSH、FLUSHA、DIRECT 等）。QEMU 读出恒为 0 }
+      - { bits: "5:4", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - { bits: "6", name: MRK, access: RO, reset: 0, desc: MARK 检测。执行 MARK VIFcode 时置 1；EE 写 VIFn_MARK 时清零 }
+      - name: DBF
+        bits: "7"
+        access: RO
+        reset: 0
+        status: reference
+        desc: 仅 VIF1。双缓冲标志，指示 TOPS 当前取哪一块缓冲区。MSCAL/MSCALF/MSCNT 启动微程序时翻转，OFFSET VIFcode 将其清零。QEMU 已实现，但没有测试覆盖。
+        values: { "0": "TOPS = BASE", "1": "TOPS = BASE + OFST" }
+      - { bits: "8", name: VSS, access: RO, reset: 0, status: unimplemented, desc: 因 FBRST.STP 而停顿 }
+      - { bits: "9", name: VFS, access: RO, reset: 0, status: unimplemented, desc: 因 FBRST.FBK（强制中止）而停顿 }
+      - { bits: "10", name: VIS, access: RO, reset: 0, status: unimplemented, desc: 因 VIFcode 的 i 位中断而停顿 }
+      - { bits: "11", name: INT, access: RO, reset: 0, status: unimplemented, desc: 检测到 i 位为 1 的 VIFcode }
+      - { bits: "12", name: ER0, access: RO, reset: 0, status: unimplemented, desc: DMAtag 不匹配错误（ps2tek 亦注明含义不明） }
+      - { bits: "13", name: ER1, access: RO, reset: 0, status: unimplemented, desc: 收到无效的 VIFcode。QEMU 只记录 LOG_GUEST_ERROR，不置此位 }
+      - { bits: "22:14", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - name: FDR
+        bits: "23"
+        access: R/W
+        reset: 0
+        desc: 仅 VIF1。VIF1 FIFO 的传输方向，可由 EE 写入；VIF0 上写入无效。QEMU 保存此位，但 DMAC 通道 1 的方向只由 D1_CHCR.DIR 决定。
+        values: { "0": "存储器 → VIF1 FIFO", "1": "VIF1 FIFO → 存储器" }
+      - { bits: "28:24", name: FQC, access: RO, reset: 0, status: unimplemented, desc: FIFO 中的四字数，VIF0 最多 8，VIF1 最多 16。QEMU 读出恒为 0 }
+      - { bits: "31:29", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 中 VIF0 的 STAT 写入全部被忽略；VIF1 只接受 FDR 位。
+      - 位定义 VIF0 与 VIF1 相同，但 VGW、DBF、FDR 只在 VIF1 上有意义。
+    source: ["PCSX2 pcsx2/Vif.h:85（tVIF_STAT）", "ps2tek §VIF I/O Registers", "QEMU include/hw/display/ps2_vif.h（PS2_VIF_STAT_*）", "QEMU hw/display/ps2_vif.c（vif_mmio_write）"]
+
+  - name: VIFn_FBRST
+    offset: 0x010
+    access: WO
+    reset: 0x00000000
+    brief: VIF 复位、强制中止、停止与停顿解除
+    desc: >-
+      只写寄存器，用于复位 VIF 以及控制停顿。读出为 0。RST 复位 VIF 并清空 FIFO；
+      FBK、STP 使 VIF 停顿；STC 解除停顿并清除 STAT 中的停顿与错误状态。
+    fields:
+      - name: RST
+        bits: "0"
+        access: WO
+        desc: >-
+          写 1 复位 VIF：丢弃正在处理的 VIFcode 及其未收完的数据，ERR 清零。
+          QEMU 中 VIF1 复位时 STAT 全部清零，VIF0 复位时保留 STAT.MRK；CYCLE、MASK、ROW/COL 等寄存器保持不变。
+      - { bits: "1", name: FBK, access: WO, status: unimplemented, desc: 写 1 强制中止，VIF 立即停顿并置 STAT.VFS。QEMU 忽略 }
+      - { bits: "2", name: STP, access: WO, status: unimplemented, desc: 写 1 使 VIF 在当前 VIFcode 结束后停顿并置 STAT.VSS。QEMU 忽略 }
+      - { bits: "3", name: STC, access: WO, status: unimplemented, desc: 写 1 解除停顿，清除 STAT 的 VSS、VFS、VIS、INT、ER0、ER1。QEMU 忽略 }
+      - { bits: "31:4", name: 保留, access: WO, desc: 写 0 }
+    ops:
+      - 复位 VIF1：写 VIF1_FBRST（0x10003C10）= 0x00000001。复位后应重新设定 CYCLE、MASK 等由 VIFcode 写入的状态。
+    source: ["PCSX2 pcsx2/Vif.h:116（tVIF_FBRST）", "PCSX2 pcsx2/Vif.cpp:142（vif1FBRST）", "ps2tek §VIF I/O Registers", "QEMU hw/display/ps2_vif.c（vif_reset_parser）"]
+
+  - name: VIFn_ERR
+    offset: 0x020
+    access: R/W
+    reset: 0x00000000
+    brief: 中断与错误屏蔽
+    desc: >-
+      屏蔽 i 位中断与两类错误引起的停顿。QEMU 保存低 3 位（写入值 AND 0x7），由于 QEMU 不产生
+      这些中断与错误，屏蔽位不起作用；FBRST.RST 将 ERR 清零。
+    fields:
+      - { bits: "0", name: MII, reset: 0, status: unimplemented, desc: 为 1 时禁止 i 位引起的中断与停顿 }
+      - { bits: "1", name: ME0, reset: 0, status: unimplemented, desc: 为 1 时屏蔽 DMAtag 不匹配错误。ps2tek 建议总是置 1 }
+      - { bits: "2", name: ME1, reset: 0, status: unimplemented, desc: 为 1 时屏蔽无效 VIFcode 错误 }
+      - { bits: "31:3", name: 保留, access: RO, reset: 0, desc: QEMU 中写入无效，读出为 0 }
+    ops:
+      - 初始化时写 VIFn_ERR = 0x00000002（ME0 = 1）。
+    source: ["PCSX2 pcsx2/Vif.h:137（tVIF_ERR）", "ps2tek §VIF I/O Registers", "QEMU hw/display/ps2_vif.c（vif_mmio_write）"]
+
+  - name: VIFn_MARK
+    offset: 0x030
+    access: R/W
+    reset: 0x00000000
+    brief: MARK 值
+    desc: >-
+      最近一次 MARK VIFcode 的 IMMEDIATE 值。EE 也可写入此寄存器，写入同时清除 STAT.MRK。
+      程序可以在 VIF 数据流中插入 MARK，再由 EE 读 MARK 判断数据流处理到了哪里。
+    fields:
+      - { bits: "15:0", name: MARK, reset: 0, desc: MARK 值 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:296（vifCode_Mark）", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_CYCLE
+    offset: 0x040
+    access: RO
+    reset: 0x00000000
+    brief: UNPACK 写入周期（CL / WL）
+    desc: >-
+      由 STCYCL VIFcode 写入（IMMEDIATE 全部 16 位），EE 只能读。UNPACK 用 CL 与 WL 决定
+      向 VU 数据存储器写入的地址序列：WL ≤ CL 时为跳写（skipping write），WL > CL 时为
+      补写（filling write），见 7.5.3 节。
+    fields:
+      - { bits: "7:0", name: CL, reset: 0, desc: 周期长度（cycle length），以四字为单位 }
+      - { bits: "15:8", name: WL, reset: 0, desc: 写入长度（write cycle length），以四字为单位。QEMU 中 WL = 0 按 1 处理 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 中 EE 写 CYCLE 被忽略并记录 LOG_GUEST_ERROR。
+    source: ["PCSX2 pcsx2/Vif.h:156（vifCycle）", "ps2tek §VIF I/O Registers", "QEMU hw/display/ps2_vif.c（vif_unpack）"]
+
+  - name: VIFn_MODE
+    offset: 0x050
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: UNPACK 加法模式
+    desc: 由 STMOD VIFcode 写入（IMMEDIATE 的第 1:0 位），决定 UNPACK 写入的数据是否与 ROW 寄存器相加。
+    fields:
+      - name: MOD
+        bits: "1:0"
+        reset: 0
+        desc: 加法模式，只作用于 MASK 中取值为 0（写入解压数据）的字段。
+        values: { "0": "普通：直接写入解压数据", "1": "偏移（offset）：写入 数据 + Rn", "2": "差分（difference）：Rn = Rn + 数据，写入新的 Rn", "3": "保留（QEMU 按普通模式处理）" }
+      - { bits: "31:2", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:708（vifCode_STMod）", "QEMU hw/display/ps2_vif.c（vif_unpack）"]
+
+  - name: VIFn_NUM
+    offset: 0x060
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: MPG / UNPACK 尚未传送的数据量
+    desc: >-
+      硬件上为 MPG 或 UNPACK 尚未传送的数据量。QEMU 只在收到 UNPACK 时把 NUM 写为 VIFcode 的
+      NUM 位域，之后不随数据递减；MPG 不更新 NUM。
+    fields:
+      - { bits: "7:0", name: NUM, reset: 0, desc: 剩余数据量 }
+      - { bits: "31:8", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "QEMU hw/display/ps2_vif.c（vif_command）"]
+
+  - name: VIFn_MASK
+    offset: 0x070
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: UNPACK 写入屏蔽矩阵
+    desc: >-
+      由 STMASK VIFcode 写入（其后的一个字）。UNPACK 的 m 位为 1 时，按 MASK 决定每个四字中
+      x、y、z、w 四个字段的写入内容。MASK 是 4 行 × 4 列的矩阵，每项 2 位：第 r 行第 f 列
+      （f = 0–3 对应 x–w）位于第 (r × 4 + f) × 2 + 1 : (r × 4 + f) × 2 位。行号 r 为当前四字
+      在 WL 周期中的序号，大于 3 时取 3。
+    fields:
+      - { bits: "7:0", name: ROW0, reset: 0, desc: 第 0 行：第 1:0 位 x，3:2 位 y，5:4 位 z，7:6 位 w }
+      - { bits: "15:8", name: ROW1, reset: 0, desc: 第 1 行，格式同上 }
+      - { bits: "23:16", name: ROW2, reset: 0, desc: 第 2 行，格式同上 }
+      - { bits: "31:24", name: ROW3, reset: 0, desc: 第 3 行，格式同上；WL 周期中第 3 个及以后的四字都使用此行 }
+    notes:
+      - 每个 2 位项的取值：0 = 写入解压数据（受 MODE 影响），1 = 写入 ROW 寄存器 Rf，2 = 写入 COL 寄存器 C[r]，3 = 不写（保持原值）。
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:688（vifCode_STMask）", "QEMU hw/display/ps2_vif.c（vif_unpack）"]
+
+  - name: VIFn_CODE
+    offset: 0x080
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: 最近处理的 VIFcode
+    desc: 最近处理的 VIFcode；VIF 停顿时为正在处理的 VIFcode。格式见 7.6 节 VIFcode。
+    fields:
+      - { bits: "15:0", name: IMMEDIATE, reset: 0, desc: IMMEDIATE 位域 }
+      - { bits: "23:16", name: NUM, reset: 0, desc: NUM 位域 }
+      - { bits: "31:24", name: CMD, reset: 0, desc: CMD 位域（含第 31 位 i） }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "QEMU hw/display/ps2_vif.c（vif_command）"]
+
+  - name: VIFn_ITOPS
+    offset: 0x090
+    access: RO
+    reset: 0x00000000
+    brief: 下一个 ITOP 值（ITOP VIFcode 写入）
+    desc: >-
+      由 ITOP VIFcode 写入（IMMEDIATE 第 9:0 位）。启动微程序（MSCAL/MSCALF/MSCNT）时复制到
+      ITOP，供微程序用 XITOP 读取。VIF0 启动微程序时先把 ITOPS 截为 8 位。
+    fields:
+      - { bits: "9:0", name: ITOPS, reset: 0, desc: ITOPS 值。VIF0 实际有效 8 位 }
+      - { bits: "31:10", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:83-89", "QEMU hw/display/ps2_vif.c（vif_start_vu）"]
+
+  - name: VIFn_BASE
+    offset: 0x0a0
+    access: RO
+    reset: 0x00000000
+    brief: 双缓冲基地址（仅 VIF1）
+    desc: 仅 VIF1。由 BASE VIFcode 写入，为 VU1 数据存储器中第一块缓冲区的四字地址。VIF0 上读出为 0。
+    fields:
+      - { bits: "9:0", name: BASE, reset: 0, desc: 缓冲区 0 的四字地址 }
+      - { bits: "31:10", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:128（vifCode_Base）", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_OFST
+    offset: 0x0b0
+    access: RO
+    reset: 0x00000000
+    brief: 双缓冲偏移（仅 VIF1）
+    desc: 仅 VIF1。由 OFFSET VIFcode 写入，第二块缓冲区地址 = BASE + OFST。VIF0 上读出为 0。
+    fields:
+      - { bits: "9:0", name: OFFSET, reset: 0, desc: 缓冲区 1 相对于 BASE 的四字偏移 }
+      - { bits: "31:10", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:578（vifCode_Offset）", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_TOPS
+    offset: 0x0c0
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: 当前写入缓冲区地址（仅 VIF1）
+    desc: >-
+      仅 VIF1。VIF 当前写入的缓冲区地址，等于 BASE（DBF = 0）或 BASE + OFST（DBF = 1）。
+      FLG 位为 1 的 UNPACK 以 TOPS 为基址。OFFSET VIFcode 把 TOPS 设为 BASE；启动微程序时
+      TOPS 先复制到 TOP，然后切换到另一块缓冲区。
+    fields:
+      - { bits: "9:0", name: TOPS, reset: 0, desc: 四字地址 }
+      - { bits: "31:10", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 中 TOPS = BASE + OFST 不做 10 位截断，BASE + OFST 超过 0x3FF 时读出值可大于 0x3FF；UNPACK 地址按 VU1 数据存储器大小回绕。
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Vif_Codes.cpp:93-107", "QEMU hw/display/ps2_vif.c（vif_start_vu）"]
+
+  - name: VIFn_ITOP
+    offset: 0x0d0
+    access: RO
+    reset: 0x00000000
+    brief: 微程序可读的 ITOP 值
+    desc: 启动微程序时由 ITOPS 复制而来。VU 微程序用 XITOP 指令读取。
+    fields:
+      - { bits: "9:0", name: ITOP, reset: 0, desc: ITOP 值 }
+      - { bits: "31:10", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VIF I/O Registers", "QEMU hw/display/ps2_vif.c（vif_start_vu）", "QEMU hw/display/ps2_vu0.c（vu0_itop）", "QEMU hw/display/ps2_vu1.c（vu1_itop）"]
+
+  - name: VIFn_TOP
+    offset: 0x0e0
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: 微程序可读的 TOP 值（仅 VIF1）
+    desc: 仅 VIF1。启动微程序时由 TOPS 复制而来，即本次微程序应处理的缓冲区地址。VU1 微程序用 XTOP 指令读取。VIF0 上读出为 0。
+    fields:
+      - { bits: "9:0", name: TOP, reset: 0, desc: 四字地址 }
+      - { bits: "31:10", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - PCSX2 pcsx2/Hw.h:136 也为 VIF0 定义了 TOP 地址 0x100038E0，但其 Vif.h 注明 VIF0 不使用 TOP；QEMU 中 VIF0 的 TOP 恒为 0。
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Hw.h:160", "QEMU hw/display/ps2_vu1.c（vu1_top）"]
+
+  - name: VIFn_R0
+    offset: 0x100
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: ROW 填充寄存器 R0（x 字段）
+    desc: >-
+      ROW 寄存器共 4 个：R0–R3 分别位于偏移 0x100、0x110、0x120、0x130，对应四字的 x、y、z、w
+      字段。由 STROW VIFcode 依次写入其后的 4 个字。UNPACK 中 MASK 项为 1 时写入 Rf，
+      MODE 为偏移 / 差分时作加数或累加器。
+    fields:
+      - { bits: "31:0", name: R, reset: 0, desc: 32 位填充值 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Hw.h:137-140", "QEMU hw/display/ps2_vif.c（vif_data）"]
+
+  - name: VIFn_R1
+    offset: 0x110
+    check: 偏移由 PS2_VIF_R0 + 0x10 × 1 得出（QEMU 按 regs[] 下标访问）
+    access: RO
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: ROW 填充寄存器 R1（y 字段），格式同 VIFn_R0
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:138", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_R2
+    offset: 0x120
+    check: 偏移由 PS2_VIF_R0 + 0x10 × 2 得出
+    access: RO
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: ROW 填充寄存器 R2（z 字段），格式同 VIFn_R0
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:139", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_R3
+    offset: 0x130
+    check: 偏移由 PS2_VIF_R0 + 0x10 × 3 得出
+    access: RO
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: ROW 填充寄存器 R3（w 字段），格式同 VIFn_R0
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:140", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_C0
+    offset: 0x140
+    access: RO
+    reset: 0x00000000
+    status: reference
+    brief: COL 填充寄存器 C0（第 0 行）
+    desc: >-
+      COL 寄存器共 4 个：C0–C3 分别位于偏移 0x140、0x150、0x160、0x170，由 STCOL VIFcode 依次写入。
+      UNPACK 中 MASK 项为 2 时，把 C[r] 写入该字段，r 为当前四字在 WL 周期中的序号（大于 3 时取 3）。
+      即 ROW 寄存器按字段（列方向）选取，COL 寄存器按四字序号（行方向）选取。
+    fields:
+      - { bits: "31:0", name: C, reset: 0, desc: 32 位填充值 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §VIF I/O Registers", "PCSX2 pcsx2/Hw.h:141-144", "QEMU hw/display/ps2_vif.c（vif_unpack）"]
+
+  - name: VIFn_C1
+    offset: 0x150
+    check: 偏移由 PS2_VIF_C0 + 0x10 × 1 得出
+    access: RO
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: COL 填充寄存器 C1，格式同 VIFn_C0
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:142", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_C2
+    offset: 0x160
+    check: 偏移由 PS2_VIF_C0 + 0x10 × 2 得出
+    access: RO
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: COL 填充寄存器 C2，格式同 VIFn_C0
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:143", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIFn_C3
+    offset: 0x170
+    check: 偏移由 PS2_VIF_C0 + 0x10 × 3 得出
+    access: RO
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: COL 填充寄存器 C3，格式同 VIFn_C0
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:144", "QEMU hw/display/ps2_vif.c"]
+
+  - name: VIF0_FIFO
+    addr: 0x10004000
+    width: 128
+    access: WO
+    brief: VIF0 FIFO 写入口
+    desc: >-
+      VIF0 的 FIFO 入口，窗口 0x10004000–0x10004FFF。DMAC 通道 0 把数据送到这里；EE 也可以直接
+      写入 VIFcode 和数据。QEMU 接受 32 位和 64 位写入（64 位写入按低字、高字顺序拆为两个字），
+      写入窗口内任一地址效果相同；读出为 0。
+    source: ["PCSX2 pcsx2/Hw.h:170", "ps2tek §EE Map", "QEMU hw/display/ps2_vif.c（vif_fifo_write）", "QEMU hw/mips/ps2_ee.c"]
+
+  - name: VIF1_FIFO
+    addr: 0x10005000
+    width: 128
+    access: WO
+    brief: VIF1 FIFO 写入口
+    desc: >-
+      VIF1 的 FIFO 入口，窗口 0x10005000–0x10005FFF，行为同 VIF0_FIFO。硬件上 STAT.FDR = 1 时
+      可从此处读出 GS 送回的数据；QEMU 不支持经 FIFO 读出，GS 到主存的传输只能经 DMAC 通道 1 完成。
+    source: ["PCSX2 pcsx2/Hw.h:171", "ps2tek §EE Map", "QEMU hw/display/ps2_vif.c（vif_fifo_read）", "QEMU hw/mips/ps2_ee.c"]

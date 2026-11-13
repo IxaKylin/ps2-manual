@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 550" width="960" height="550" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="550" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 11-1 SIF 数据通路</text>
+  <text x="24" y="58" class="s">实线箭头为数据流向；虚线为 QEMU 未接通的通路。DMAC 与主存、IOP DMA 与 IOP 内存之间的连线从略。</text>
+
+  <!-- EE side -->
+  <rect x="24" y="76" width="280" height="420" rx="14" class="ee"/>
+  <text x="40" y="100" class="h">EE 一侧（EE 总线）</text>
+  <rect x="40" y="120" width="248" height="44" rx="5" class="blk" stroke="#2f6fb2"/>
+  <text x="52" y="139" class="b">ch5</text>
+  <text x="84" y="139" class="n">SIF0</text>
+  <text x="200" y="139" class="s">0x1000C000</text>
+  <text x="52" y="156" class="s">EE DMAC，接收（目的链）</text>
+  <rect x="40" y="196" width="248" height="44" rx="5" class="blk" stroke="#2f6fb2"/>
+  <text x="52" y="215" class="b">ch6</text>
+  <text x="84" y="215" class="n">SIF1</text>
+  <text x="200" y="215" class="s">0x1000C400</text>
+  <text x="52" y="232" class="s">EE DMAC，发送（源链）</text>
+  <rect x="40" y="272" width="248" height="44" rx="5" class="ext"/>
+  <text x="52" y="291" class="b">ch7</text>
+  <text x="84" y="291" class="n">SIF2</text>
+  <text x="200" y="291" class="s">0x1000C800</text>
+  <text x="52" y="308" class="s">EE DMAC，QEMU 无外设</text>
+  <rect x="40" y="340" width="248" height="44" rx="5" class="blk" stroke="#2f6fb2"/>
+  <text x="52" y="359" class="n">R5900 CPU</text>
+  <text x="52" y="376" class="s">访问 0x1000F200–0x1000F260</text>
+  <rect x="40" y="420" width="248" height="52" rx="5" class="blk" stroke="#2f6fb2"/>
+  <text x="52" y="441" class="n">EE INTC</text>
+  <text x="52" y="461" class="s">1 号中断源 SBUS → INT0</text>
+
+  <!-- SIF -->
+  <rect x="340" y="76" width="280" height="340" rx="14" fill="#f4f5f7" stroke="#3a4250" stroke-width="2"/>
+  <text x="356" y="100" class="h">SIF（板级设备 ps2-sif）</text>
+  <rect x="356" y="120" width="248" height="44" rx="5" class="blk" stroke="#3a4250"/>
+  <text x="368" y="139" class="n">SIF0 FIFO（IOP → EE）</text>
+  <text x="368" y="156" class="s">128 字；EE 标签先于数据入队</text>
+  <rect x="356" y="196" width="248" height="44" rx="5" class="blk" stroke="#3a4250"/>
+  <text x="368" y="215" class="n">SIF1 FIFO（EE → IOP）</text>
+  <text x="368" y="232" class="s">128 字；每块首个四字为 IOP 标签</text>
+  <rect x="356" y="272" width="248" height="44" rx="5" class="ext"/>
+  <text x="368" y="291" class="n">SIF2（双向，QEMU 未实现）</text>
+  <text x="368" y="308" class="s">PS1 模式下用作 GPU 通道</text>
+  <rect x="356" y="326" width="248" height="72" rx="5" class="blk" stroke="#3a4250"/>
+  <text x="368" y="346" class="n">两侧共用的寄存器</text>
+  <text x="364" y="365" class="s">MSCOM SMCOM MSFLG SMFLG CTRL BD6</text>
+  <text x="368" y="384" class="s">EE 0x1000F200 / IOP 0x1D000000</text>
+
+  <!-- IOP side -->
+  <rect x="656" y="76" width="280" height="420" rx="14" class="iop"/>
+  <text x="672" y="100" class="h">IOP 一侧（IOP 总线）</text>
+  <rect x="672" y="120" width="248" height="44" rx="5" class="blk" stroke="#2e8b57"/>
+  <text x="684" y="139" class="b">ch9</text>
+  <text x="720" y="139" class="n">SIF0</text>
+  <text x="832" y="139" class="s">0x1F801520</text>
+  <text x="684" y="156" class="s">IOP DMA，发送（链模式）</text>
+  <rect x="672" y="196" width="248" height="44" rx="5" class="blk" stroke="#2e8b57"/>
+  <text x="684" y="215" class="b">ch10</text>
+  <text x="720" y="215" class="n">SIF1</text>
+  <text x="832" y="215" class="s">0x1F801530</text>
+  <text x="684" y="232" class="s">IOP DMA，接收（链模式）</text>
+  <rect x="672" y="272" width="248" height="44" rx="5" class="ext"/>
+  <text x="684" y="291" class="b">ch2</text>
+  <text x="720" y="291" class="n">SIF2</text>
+  <text x="832" y="291" class="s">0x1F8010A0</text>
+  <text x="684" y="308" class="s">IOP DMA，QEMU 无外设</text>
+  <rect x="672" y="340" width="248" height="44" rx="5" class="blk" stroke="#2e8b57"/>
+  <text x="684" y="359" class="n">R3000A CPU</text>
+  <text x="684" y="376" class="s">访问 0x1D000000–0x1D000060</text>
+  <rect x="672" y="420" width="118" height="52" rx="5" class="blk" stroke="#2e8b57"/>
+  <text x="682" y="441" class="n">ICFG 第 1 位</text>
+  <text x="682" y="461" class="s">0x1F801450</text>
+  <rect x="802" y="420" width="118" height="52" rx="5" class="ext"/>
+  <text x="812" y="441" class="n">IOP INTC</text>
+  <text x="812" y="461" class="s">1 号 SBUS（未接）</text>
+
+  <!-- SIF0: IOP to EE -->
+  <path d="M672 142 H606" class="ln" marker-end="url(#a)"/>
+  <path d="M356 142 H290" class="ln" marker-end="url(#a)"/>
+  <!-- SIF1: EE to IOP -->
+  <path d="M288 218 H354" class="ln" marker-end="url(#a)"/>
+  <path d="M604 218 H670" class="ln" marker-end="url(#a)"/>
+  <!-- SIF2 -->
+  <path d="M290 294 H354" class="ln" stroke-dasharray="5 3" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path d="M606 294 H670" class="ln" stroke-dasharray="5 3" marker-start="url(#a)" marker-end="url(#a)"/>
+  <!-- register access -->
+  <path d="M290 362 H354" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+  <path d="M606 362 H670" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+  <!-- SBUS interrupt -->
+  <text x="480" y="436" text-anchor="middle" class="b">SBUS 中断（IOP 写 ICFG 第 1 位）</text>
+  <path d="M672 446 H290" class="ln" marker-end="url(#a)"/>
+
+  <text x="24" y="526" class="s">EE 一侧标注 EE 物理地址，IOP 一侧标注 IOP 物理地址。SIF0/SIF1 的 IOP 通道只支持带标签的链模式。</text>
+</svg>

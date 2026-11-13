@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="#1d2733"/>
+  <rect x="16" y="16" width="32" height="32" rx="3" fill="#2f6fb2"/>
+  <g stroke="#9fc3ea" stroke-width="3" stroke-linecap="round">
+    <path d="M22 10V16M32 10V16M42 10V16M22 48V54M32 48V54M42 48V54M10 22H16M10 32H16M10 42H16M48 22H54M48 32H54M48 42H54"/>
+  </g>
+  <text x="32" y="38" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="15" font-weight="700" fill="#ffffff">PS2</text>
+</svg>

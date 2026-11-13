@@ -1,0 +1,53 @@
+# R5900 浮点协处理器 COP1 的控制寄存器，经 CFC1/CTC1 访问。
+# offset 写 FCR 编号（CFC1/CTC1 的 fs 字段），不是地址。
+block: ee-cop1
+title: EE 核心 COP1（FPU）控制寄存器
+page: /chapters/03-ee-core
+access_size: 32 位，仅 CFC1/CTC1
+width: 32
+status: verified
+qemu:
+  files:
+    - target/mips/cpu.h
+    - target/mips/tcg/tx79.decode
+    - target/mips/tcg/tx79_translate.c
+    - target/mips/tcg/system/r5900_fpu_helper.c
+registers:
+  - name: FCR0
+    offset: 0
+    check: FCR 编号，无总线地址
+    access: RO
+    reset: 0x00002E00
+    brief: FPU 实现号与修订号
+    desc: 只读。第 15:8 位为实现号 0x2E。QEMU 中 CFC1 读出固定值 0x00002E00。
+    fields:
+      - { bits: "15:8", name: Imp, reset: 0x2E, desc: 实现号 }
+      - { bits: "7:0", name: Rev, desc: 修订号。QEMU 读出 0x00，PCSX2 为 0x30 }
+    notes:
+      - PCSX2 中 FCR0 为 0x00002E30；QEMU 的 CFC1 读出 0x00002E00，而经 gdbstub 读出 0x00002E30，两者不一致。
+    source: ["PCSX2 pcsx2/R5900.cpp:71", "ps2tek §EE COP1 Registers", "QEMU target/mips/tcg/tx79_translate.c（trans_CFC1）"]
+  - name: FCR31
+    offset: 31
+    check: FCR 编号，无总线地址
+    access: R/W
+    reset: 0x01000001
+    brief: FPU 条件位与运算标志
+    desc: 保存比较结果 C 以及各运算产生的标志。R5900 FPU 不产生浮点异常，只置标志。I、D、O、U 反映最近一次相关运算的结果，SI、SD、SO、SU 为对应的累积（粘滞）标志，只能由软件清零。BC1T、BC1F 测试 C 位。
+    fields:
+      - { bits: "24", name: 保留, access: RO, reset: 1, desc: 读出恒为 1 }
+      - { bits: "23", name: C, desc: 条件位。C.cond.S 比较的结果，BC1T/BC1F 据此跳转 }
+      - { bits: "17", name: I, desc: 无效运算标志：除法 0/0、对负数开方等 }
+      - { bits: "16", name: D, desc: 除零标志：DIV.S 除数为 0 }
+      - { bits: "15", name: O, desc: 上溢标志。结果被钳位为最大规格化数 }
+      - { bits: "14", name: U, desc: 下溢标志。结果被置为 0 }
+      - { bits: "6", name: SI, desc: I 的累积标志 }
+      - { bits: "5", name: SD, desc: D 的累积标志 }
+      - { bits: "4", name: SO, desc: O 的累积标志 }
+      - { bits: "3", name: SU, desc: U 的累积标志 }
+      - { bits: "0", name: 保留, access: RO, reset: 1, desc: 读出恒为 1 }
+    ops:
+      - 清除全部标志：CTC1 写 0（读回为 0x01000001）。
+      - 检查一段计算是否溢出：先清除 SO，运算后 CFC1 读 FCR31，测试第 4 位。
+    notes:
+      - QEMU 的可写位掩码为 0x0083C078，读出时再或上 0x01000001。
+    source: ["PCSX2 pcsx2/FPU.cpp:51", "ps2tek §EE COP1 Registers", "QEMU target/mips/cpu.h（R5900_FCR31_*）", "QEMU target/mips/tcg/tx79_translate.c（trans_CTC1）"]

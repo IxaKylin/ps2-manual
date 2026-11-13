@@ -1,0 +1,161 @@
+# 子系统接口（SIF）寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# SIF 寄存器只有一组存储单元，EE 与 IOP 各从自己的总线上访问：EE 地址
+# 0x1000F200 起，IOP 地址 0x1D000000 起，偏移相同。addr 写 EE 地址，IOP 地址
+# 在 desc 中注明。两侧的写入规则不同，access 一栏按 EE 一侧填写。
+block: sif
+title: 子系统接口 SIF
+page: /chapters/11-sif
+base: 0x1000F200
+size: 0x100
+bus: EE 总线（IOP 一侧为 IOP 总线 0x1D000000）
+access_size: 32 位
+width: 32
+status: verified
+qemu:
+  files: [include/hw/misc/ps2_sif.h, hw/misc/ps2_sif.c, hw/mips/ps2.c]
+source: ["QEMU hw/misc/ps2_sif.c", "ps2tek §Subsystem Interface (SIF)"]
+registers:
+  - name: MAINADDR
+    addr: 0x1000F200
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    brief: EE → IOP 邮箱（MSCOM），只有 EE 可写；IOP 地址 0x1D000000
+    desc: >-
+      主 → 从（main to sub）通信字，公开资料中也称 SIF_MSCOM。EE 地址 0x1000F200，IOP 地址 0x1D000000。
+      EE 写入的值原样保存，两侧都可读出；IOP 写入无效。硬件不解释其内容，系统软件用它把 EE 一侧的
+      SIF 数据结构或接收缓冲区地址告诉 IOP（ps2tek）。
+    fields:
+      - { bits: "31:0", name: MSCOM, reset: 0, desc: "通信字。EE 一侧可读写，IOP 一侧只读" }
+    notes:
+      - QEMU 中 IOP 写 MAINADDR 被忽略，并记录 guest error 日志。
+      - Sony BIOS 启动时 EE 向 MAINADDR 写入 0x80021080（见 11.7.1 节）。
+    source: ["QEMU hw/misc/ps2_sif.c（ps2_sif_write、ps2_sif_iop_reg_write）", "PCSX2 pcsx2/IopMem.cpp:413-414", "ps2tek §SIF Registers"]
+
+  - name: SUBADDR
+    addr: 0x1000F210
+    offset: 0x10
+    access: RO
+    reset: 0x00000000
+    brief: IOP → EE 邮箱（SMCOM），只有 IOP 可写；IOP 地址 0x1D000010
+    desc: >-
+      从 → 主（sub to main）通信字，公开资料中也称 SIF_SMCOM。EE 地址 0x1000F210，IOP 地址 0x1D000010。
+      IOP 写入的值原样保存，两侧都可读出；对 EE 一侧只读。IOP 的 SIF 命令模块把自己的命令接收缓冲区
+      （IOP 内存地址）写入 SUBADDR，EE 读出后把 SIF1 命令包发往该地址。
+    fields:
+      - { bits: "31:0", name: SMCOM, reset: 0, desc: "通信字。IOP 一侧可读写，EE 一侧只读" }
+    notes:
+      - QEMU 中 EE 写 SUBADDR 被忽略，并记录 guest error 日志（ps2tek 的说法）；PCSX2 则保存 EE 写入的值（PCSX2 pcsx2/HwWrite.cpp:267 的默认赋值）。
+      - Sony BIOS 启动时 IOP 向 SUBADDR 先写 0，再写 0x00019600（命令缓冲区）。
+    source: ["QEMU hw/misc/ps2_sif.c（ps2_sif_write、ps2_sif_iop_reg_write）", "PCSX2 pcsx2/IopMem.cpp:416-418", "ps2tek §SIF Registers"]
+
+  - name: MSFLAG
+    addr: 0x1000F220
+    offset: 0x20
+    access: R/W
+    reset: 0x00000000
+    brief: EE → IOP 标志（MSFLG），EE 写 1 置位，IOP 写 1 清零；IOP 地址 0x1D000020
+    desc: >-
+      主 → 从标志字，公开资料中也称 SIF_MSFLG。EE 地址 0x1000F220，IOP 地址 0x1D000020。
+      EE 写入时，写入值中为 1 的位置 1（按位或），为 0 的位不变；IOP 写入时，写入值中为 1 的位
+      清零，为 0 的位不变。两侧读出同一个值。硬件对 32 位一视同仁，各位含义由软件约定，
+      常用的三个标志位见位域表。
+    fields:
+      - { bits: "15:0", name: SW, reset: 0, desc: "软件定义" }
+      - { bits: "16", name: SIFINIT, reset: 0, desc: "EE 一侧 SIF 已初始化。Sony BIOS 中 EE 写入 0x00010000，IOP 的 SIF 管理模块循环读 MSFLAG，等到此位为 1 后才继续初始化" }
+      - { bits: "17", name: CMDINIT, reset: 0, status: reference, desc: "SIF 命令层初始化标志。ps2sdk 的 IOP sifcmd 收到 opt = 0 的 SIF_CMD_INIT_CMD 时向 MSFLAG 写此位（IOP 写入即清零）" }
+      - { bits: "31:18", name: SW, reset: 0, desc: "软件定义" }
+    ops:
+      - EE 置位：写 1 << n，例如写 0x00010000 置 SIFINIT，其他位不受影响。
+      - IOP 应答：读 MSFLAG 看到某位为 1 后，向 MSFLAG 写同一个值将其清零。
+    notes:
+      - EE 无法清除 MSFLAG 的任何位，IOP 无法置位；只有系统复位把它清零。
+      - QEMU 的 ps2/sif-ee 与 ps2/sif-iop 测试覆盖两侧的写入规则。
+    source: ["QEMU hw/misc/ps2_sif.c", "PCSX2 pcsx2/HwWrite.cpp:163-165", "PCSX2 pcsx2/IopMem.cpp:420-422", "ps2sdk iop/system/sifman/src/sifman.c:138-143", "ps2sdk iop/system/sifcmd/src/sifcmd.c:89-101", "ps2tek §SIF Registers"]
+
+  - name: SMFLAG
+    addr: 0x1000F230
+    offset: 0x30
+    access: R/W1C
+    reset: 0x00000000
+    brief: IOP → EE 标志（SMFLG），IOP 写 1 置位，EE 写 1 清零；IOP 地址 0x1D000030
+    desc: >-
+      从 → 主标志字，公开资料中也称 SIF_SMFLG。EE 地址 0x1000F230，IOP 地址 0x1D000030。
+      IOP 写入时，写入值中为 1 的位置 1；EE 写入时，写入值中为 1 的位清零。两侧读出同一个值。
+      IOP 用它向 EE 报告启动进度：SIFINIT、CMDINIT、BOOTEND 三位都置 1 后 EE 才继续（顺序因软件而异：
+      Sony BIOS 为 SIFINIT、BOOTEND、CMDINIT），EE 在引导过程中循环读 SMFLAG 等待这些位。
+    fields:
+      - { bits: "15:0", name: SW, reset: 0, desc: "软件定义" }
+      - { bits: "16", name: SIFINIT, reset: 0, desc: "IOP 的 SIF 硬件与 DMA 已初始化（IOP 写 0x00010000）" }
+      - { bits: "17", name: CMDINIT, reset: 0, desc: "IOP 的 SIF 命令层已初始化，SUBADDR 中已是命令缓冲区地址（IOP 写 0x00020000）" }
+      - { bits: "18", name: BOOTEND, reset: 0, desc: "IOP 引导结束（IOP 写 0x00040000）。Sony BIOS 中 IOP 在 SIF 初始化时置位一次，EE 读到后写 0x00040000 清除；IOP 加载完引导模块后再次置位（ps2sdk 中由 EESYNC 模块写入）" }
+      - { bits: "31:19", name: SW, reset: 0, desc: "软件定义" }
+    ops:
+      - EE 查询 IOP 是否已启动：读 SMFLAG，检查 SIFINIT（ps2sdk SifIopIsAlive）或 BOOTEND（SifIopSync）。
+      - EE 清除标志：写 1 << n，例如写 0x00040000 清除 BOOTEND，以便等待下一次引导结束。
+    notes:
+      - 复位后 SMFLAG 为 0，由 ROM 中的 IOP 程序置位；QEMU 不代替 IOP 置位（当前版本中 SIF 不含高层模拟（HLE））。
+      - Sony BIOS 启动时 EE 读到 SMFLAG = 0x00070000，即三个标志位全部为 1。
+    source: ["QEMU hw/misc/ps2_sif.c", "PCSX2 pcsx2/HwWrite.cpp:167-169", "PCSX2 pcsx2/IopMem.cpp:424-426", "ps2sdk iop/system/sifman/include/sifman.h:59-65", "ps2sdk ee/kernel/src/iopcontrol.c:97-108", "ps2sdk iop/system/eesync/src/eesync.c:39", "ps2tek §SIF Registers"]
+
+  - name: CTRL
+    addr: 0x1000F240
+    offset: 0x40
+    access: R/W
+    reset: "0xF0000102"
+    brief: SIF 控制，两侧写入规则不同；IOP 地址 0x1D000040
+    desc: >-
+      SIF 控制寄存器，EE 地址 0x1000F240，IOP 地址 0x1D000040。公开资料对各位含义所知甚少，
+      本表按 QEMU（与 PCSX2 一致）的行为描述。存储值复位为 0；EE 读出时第 31:28、8、1 位固定为 1
+      （复位后读出 0xF0000102），IOP 读出时第 31:28、1 位固定为 1（复位后读出 0xF0000002）。
+      EE 写入只保留第 8 位；IOP 写入只影响第 7:4 位和第 15:12 位，规则见位域表。
+    fields:
+      - { bits: "0", name: 保留, access: RO, reset: 0, desc: "读出为 0" }
+      - { bits: "1", name: ONE, access: RO, reset: 1, desc: "两侧读出恒为 1，含义不明" }
+      - { bits: "3:2", name: 保留, access: RO, reset: 0, desc: "读出为 0" }
+      - name: IOPC
+        bits: "7:4"
+        reset: 0
+        desc: >-
+          IOP 控制位，含义不明，只能由 IOP 写。IOP 写入值中第 7:4 位不全为 0 时：若这些写 1 的位中
+          有任一位当前为 1，则把这些位全部清零，否则全部置 1。例如当前为 0 时写 0x20 得到第 5 位 = 1，
+          再写 0x30 则第 5、4 位都清零。ps2sdk 的 IOP sifman 在 SIF1 接收准备时检查第 6 位，为 0 时写 0x40。
+      - name: EEC
+        bits: "8"
+        reset: 1
+        desc: >-
+          EE 控制位，只能由 EE 写，EE 写入时保存写入值的第 8 位。EE 读出恒为 1；IOP 读出为保存的值
+          （复位后为 0）。
+          Sony BIOS 启动时 EE 写入 0x100。
+      - { bits: "11:9", name: 保留, access: RO, reset: 0, desc: "读出为 0" }
+      - name: STATE
+        bits: "15:12"
+        reset: 0
+        desc: IOP 写入值的第 5 位或第 7 位为 1 时，此位域被置为 2（0x2000），然后再按 IOPC 的规则处理第 7:4 位。含义不明。
+      - { bits: "17:16", name: 保留, access: RO, reset: 0, desc: "读出为 0" }
+      - { bits: "18", name: PS1IRQ, access: WO, reset: 0, status: unimplemented, desc: "EE 写 1：PCSX2 中向 IOP INTC 第 1 号中断源（SBUS）发中断，用于 PS1 兼容模式。QEMU 只记录 LOG_UNIMP" }
+      - { bits: "19", name: PS1RST, access: WO, reset: 0, status: unimplemented, desc: "EE 写 1：PCSX2 中把 IOP 复位并切换到 PS1 兼容模式。QEMU 只记录 LOG_UNIMP" }
+      - { bits: "27:20", name: 保留, access: RO, reset: 0, desc: "读出为 0" }
+      - { bits: "31:28", name: ONES, access: RO, reset: 0xF, desc: "两侧读出恒为 0xF，含义不明" }
+    notes:
+      - 复位值一栏为 EE 一侧读出值；IOP 一侧读出 0xF0000002。
+      - QEMU 的 ps2/sif-iop 测试依次由 IOP 写 0x20、0x30、0x10，读出 0xF0002022、0xF0002002、0xF0002012，并检查 EE 写 0x120 后 IOP 读出 0xF0002112。
+      - 第 15 位在 PCSX2 的 SIF2 传输中会被置位和清零（pcsx2/sif2.cpp:302、369），QEMU 未模拟 SIF2。
+    source: ["QEMU hw/misc/ps2_sif.c（PS2_SIF_CTRL_*）", "PCSX2 pcsx2/HwRead.cpp:153", "PCSX2 pcsx2/HwWrite.cpp:171-192", "PCSX2 pcsx2/IopMem.cpp:428-443", "ps2sdk iop/system/sifman/src/sifman.c:170-178", "ps2tek §SIF Registers"]
+
+  - name: BD6
+    addr: 0x1000F260
+    offset: 0x60
+    access: R/W
+    reset: 0x1D000060
+    brief: 用途不明的寄存器，IOP 写入即清零；IOP 地址 0x1D000060
+    desc: >-
+      EE 地址 0x1000F260，IOP 地址 0x1D000060。用途不明，只知道引导时会被访问（ps2tek）。
+      QEMU 中 EE 一侧可读写，复位值 0x1D000060；IOP 一侧读出恒为 0，IOP 写入任意值都把它清零。
+    fields:
+      - { bits: "31:0", name: VALUE, reset: 0x1D000060, desc: "含义不明" }
+    notes:
+      - 复位值 0x1D000060 与 IOP 一侧读出 0 取自 PCSX2（PCSX2 pcsx2/Hw.cpp:35、pcsx2/IopMem.cpp:238-239），真实硬件上的含义来源不确定。
+      - Sony BIOS 的 IOP 程序第一次访问 SIF 就是读 BD6。
+    source: ["QEMU hw/misc/ps2_sif.c（PS2_SIF_BD6_RESET）", "PCSX2 pcsx2/Hw.cpp:35", "PCSX2 pcsx2/HwWrite.cpp:194-199", "PCSX2 pcsx2/IopMem.cpp:238-239", "PCSX2 pcsx2/IopMem.cpp:445-447", "ps2tek §SIF Registers"]

@@ -1,0 +1,309 @@
+# SIO2 串行接口寄存器（手柄、存储卡）。格式说明见 docs/data/SCHEMA.md。
+#
+# 地址为 IOP 物理地址；EE 可经 SBUS 窗口 0x1F000000 以相同地址访问。
+# offset 相对于 base 0x1F808200，与 QEMU 头文件中的 PS2_SIO2_xxx 常量一致。
+# 位域名称取自 ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h（逆向所得，参考级）；
+# QEMU 只按 PCSX2 的做法模拟“无外设”时的结果，多数位域不按位模拟。
+block: sio2
+title: SIO2 串行接口
+page: /chapters/14-peripherals
+base: 0x1F808200
+size: 0x100
+bus: IOP 总线
+access_size: 32 位；SIO2_DATAIN、SIO2_DATAOUT 为 8 位
+width: 32
+status: verified
+qemu:
+  files: [include/hw/misc/ps2_sio2.h, hw/misc/ps2_sio2.c, hw/mips/ps2_iop.c]
+registers:
+  - name: SIO2_SEND3
+    addr: 0x1F808200
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    brief: 命令队列，16 项（SEND3[0]–SEND3[15]，地址 0x1F808200 + 4n）
+    desc: >-
+      命令队列。SIO2 一次传输最多处理 16 条命令，每条命令占一个字，依次放在 SEND3[0]–SEND3[15]
+      （地址 0x1F808200 + 4n）。每项给出该命令使用的端口、发送字节数和接收字节数；发送字节数为 0 的项
+      表示队列结束。命令的数据字节（第一个字节为外设选择字节）由 SIO2_DATAIN 或 SIO2in DMA 送入。
+      QEMU 中写 SEND3[0] 会使 SIO2 软复位：队列位置回到第 0 项，SIO2_RECV1 清零。
+    fields:
+      - name: PORT
+        bits: "1:0"
+        reset: 0
+        desc: 端口号 0–3，选择该命令使用哪一组 SIO2_SEND1/SIO2_SEND2 设定及哪个端口。QEMU 只使用第 0 位，用来决定 SIO2_RECV1 中报告哪个端口无设备。
+      - { bits: "2", name: PAUSE, reset: 0, status: unimplemented, desc: "该命令结束后暂停，等待 SIO2_CTRL.RESUME。QEMU 不模拟" }
+      - { bits: "3", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - name: TX_DMA
+        bits: "4"
+        reset: 0
+        status: unimplemented
+        desc: 发送数据来源。QEMU 不区分，DATAIN 写入与 SIO2in DMA 都可以送数据
+        values: { "0": "PIO（软件写 SIO2_DATAIN）", "1": "DMA（SIO2in，通道 11）" }
+      - name: RX_DMA
+        bits: "5"
+        reset: 0
+        status: unimplemented
+        desc: 接收数据去向。QEMU 不区分
+        values: { "0": "PIO（软件读 SIO2_DATAOUT）", "1": "DMA（SIO2out，通道 12）" }
+      - { bits: "6", name: NORMAL_TR, reset: 0, status: unimplemented, desc: "普通传输。ps2sdk 注释：NORMAL_TR = 1、SPECIAL_TR = 0 为通常使用的组合；两位同为 0 或同为 1 时不传输。QEMU 不检查" }
+      - { bits: "7", name: SPECIAL_TR, reset: 0, status: unimplemented, desc: "特殊传输，未见使用。QEMU 不检查" }
+      - name: TX_SZ
+        bits: "16:8"
+        reset: 0
+        desc: 发送字节数（含外设选择字节），0–256。为 0 表示队列在此结束。QEMU 读取第 17:8 位作为命令长度，命令收满该字节数后处理下一项。
+      - { bits: "17", name: 未知, reset: 0, desc: "含义不明。QEMU 把它当作命令长度的最高位" }
+      - { bits: "26:18", name: RX_SZ, reset: 0, status: unimplemented, desc: "接收字节数，0–256。QEMU 没有外设应答，不使用该位域" }
+      - { bits: "29:27", name: 未知, reset: 0, status: unimplemented, desc: "含义不明；ps2sdk 注释第 28、29 位不能置 1" }
+      - { bits: "30", name: BAUD_DIV, reset: 0, status: unimplemented, desc: "选择 SIO2_SEND1 中的 BAUD0_DIV（0）或 BAUD1_DIV（1）作为本命令的波特率分频值" }
+      - { bits: "31", name: WAIT_ACK_FOREVER, reset: 0, status: unimplemented, desc: 无限等待外设的应答（ACK）信号 }
+    ops:
+      - 先写 SEND3[1]、SEND3[2] 等后续项，最后写 SEND3[0]；在最后一条命令之后写一个 0 项作为结束标志（16 项全部使用时不需要）。
+      - 一项的取值为 (RX_SZ << 18) | (TX_SZ << 8) | 控制位 | PORT。例如端口 0 上发送 5 字节、接收 5 字节的普通 PIO 传输：(5 << 18) | (5 << 8) | 0x40 = 0x00140540。
+    notes:
+      - ps2tek 把第 8–16 位称为“不被 SIO2 使用的长度”，第 18–24 位称为“实际命令长度”，与 ps2sdk 的 TX_SZ/RX_SZ 解释不同；QEMU 按 PCSX2 的做法使用第 17:8 位。
+      - QEMU 中写 SEND3[0] 引起软复位，这是 PCSX2 的做法（Sio2::SetCmd），真实硬件是否如此没有资料。
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:49-74"
+      - "PCSX2 pcsx2/SIO/SioTypes.h:106-110（Sio2Cmd）"
+      - "PCSX2 pcsx2/SIO/Sio2.cpp:121-129（SetCmd）"
+      - "ps2tek §SIO2 Registers"
+      - "QEMU hw/misc/ps2_sio2.c（ps2_sio2_write_data）"
+
+  - name: SIO2_SEND1
+    addr: 0x1F808240
+    offset: 0x40
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 端口 n 控制 1：ATT 时序与波特率分频（n = 0–3，地址 0x1F808240 + 8n）
+    desc: >-
+      端口控制寄存器 1，每个端口一个，地址为 0x1F808240 + 8n（n = 0–3），与 SIO2_SEND2 交替排列。
+      给出该端口 ATT（片选）信号的时序和两个波特率分频值，由 SIO2_SEND3.BAUD_DIV 选择其一。
+      QEMU 只保存写入值，可以读回，不影响传输。
+    fields:
+      - { bits: "7:0", name: ATT_LOW_PER, reset: 0, desc: ATT 信号低电平保持时间 }
+      - { bits: "15:8", name: ATT_MIN_HIGH_PER, reset: 0, desc: ATT 信号高电平最短时间 }
+      - { bits: "23:16", name: BAUD0_DIV, reset: 0, desc: 波特率分频值 0 }
+      - { bits: "31:24", name: BAUD1_DIV, reset: 0, desc: 波特率分频值 1 }
+    notes:
+      - ps2sdk 的 MX4SIO 驱动按 ATT_LOW_PER = 5、ATT_MIN_HIGH_PER = 5 设定，并只使用 BAUD1_DIV（mx4sio.c:154-158）。
+      - 位域含义来自 ps2sdk 的逆向定义，单位未见资料。
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:39-42"
+      - "ps2sdk iop/sio/mx4sio_bd/src/mx4sio.c:154-164"
+      - "PCSX2 pcsx2/ps2/Iop/IopHwWrite.cpp:604-618"
+      - "ps2tek §SIO2 Registers"
+
+  - name: SIO2_SEND2
+    addr: 0x1F808244
+    offset: 0x44
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 端口 n 控制 2：应答超时与字节间隔（n = 0–3，地址 0x1F808244 + 8n）
+    desc: >-
+      端口控制寄存器 2，每个端口一个，地址为 0x1F808244 + 8n（n = 0–3）。地址第 2 位为 1 时访问 SEND2，
+      为 0 时访问 SEND1。QEMU 只保存写入值，可以读回，不影响传输。
+    fields:
+      - { bits: "15:0", name: ACK_TIMEOUT_PER, reset: 0, desc: 等待外设应答信号的超时时间 }
+      - { bits: "23:16", name: INTER_BYTE_PER, reset: 0, desc: 字节之间的间隔 }
+      - { bits: "24", name: 未知, reset: 0, desc: 含义不明，ps2sdk 写 0 }
+      - { bits: "25", name: IF_MODE_SPI_DIFF, reset: 0, desc: 接口模式选择（ps2sdk 命名为 SPI 差异模式），含义未见详细资料 }
+      - { bits: "31:26", name: 未知, reset: 0, desc: 含义不明 }
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:44-47"
+      - "ps2sdk iop/sio/mx4sio_bd/src/mx4sio.c:160-164"
+      - "ps2tek §SIO2 Registers"
+
+  - name: SIO2_DATAIN
+    addr: 0x1F808260
+    offset: 0x60
+    width: 8
+    access: WO
+    brief: 命令数据写入（8 位），SIO2in DMA 也写此处
+    desc: >-
+      8 位命令数据端口。软件或 SIO2in DMA（IOP DMA 通道 11）把命令字节逐个写入此处，SIO2 按 SIO2_SEND3
+      的发送字节数把它们分配给队列中的各条命令。每条命令的第一个字节是外设选择字节：0x01 手柄、
+      0x21 多分插适配器（multitap）、0x61 红外、0x81 存储卡。
+      QEMU 只识别 0x01 与 0x21，据此生成 SIO2_RECV1 的“无设备”结果；其他选择字节按“无设备”处理。
+      只接受 8 位访问，读出为 0。
+    notes:
+      - ps2sdk 的 sio2regs.h 从 SIO2 一侧命名，把 0x1F808260 称为 DATA_OUT、0x1F808264 称为 DATA_IN，与本书（依 PCSX2、ps2tek）相反。
+      - 队列第 16 项之后再写入的字节被丢弃（QEMU 记录 guest error）。
+    source:
+      - "ps2tek §SIO2 Registers"
+      - "PCSX2 pcsx2/IopHw.h:67（HW_SIO2_TX）"
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:14-15"
+      - "QEMU hw/misc/ps2_sio2.c（ps2_sio2_write_data、ps2_sio2_dispatch）"
+
+  - name: SIO2_DATAOUT
+    addr: 0x1F808264
+    offset: 0x64
+    width: 8
+    access: RO
+    status: unimplemented
+    brief: 应答数据读出（8 位），SIO2out DMA 也读此处
+    desc: >-
+      8 位应答数据端口。命令执行后，外设返回的字节由软件或 SIO2out DMA（IOP DMA 通道 12）从此处读出。
+      QEMU 没有手柄、存储卡等外设，读出恒为 0xFF；SIO2out DMA
+      也向 IOP 内存写入 0xFF。写入被忽略。
+    source:
+      - "ps2tek §SIO2 Registers"
+      - "PCSX2 pcsx2/IopHw.h:68（HW_SIO2_RX）"
+      - "QEMU hw/misc/ps2_sio2.c（ps2_sio2_read、ps2_sio2_dma_out_start）"
+
+  - name: SIO2_CTRL
+    addr: 0x1F808268
+    offset: 0x68
+    access: R/W
+    reset: 0x000003BC
+    brief: 控制：启动传输、复位、中断允许
+    desc: >-
+      SIO2 控制寄存器。写 START = 1 启动队列中的传输，传输结束后 SIO2 置 SIO2_ISTAT.TR_COMP 并向 IOP INTC
+      发出第 17 号中断；写第 3:2 位复位 SIO2 的内部状态和 FIFO，为下一次传输做准备。
+      QEMU 中写 START 时立即“完成”传输并发出中断（只有 SIO2_ISTAT 原为 0 时才发出），START 位不保存，
+      读出总为 0；不含 START 而含第 3:2 位任一位的写入使队列位置回到第 0 项。其余位只保存。
+    fields:
+      - { bits: "0", name: START, access: WO, reset: 0, desc: "写 1 启动传输。QEMU 中读出为 0" }
+      - { bits: "1", name: RESUME, reset: 0, status: unimplemented, desc: "恢复因 SIO2_SEND3.PAUSE 暂停的传输" }
+      - { bits: "2", name: RESET_STATE, reset: 1, desc: "复位内部状态。QEMU 中与 RESET_FIFOS 作用相同：队列位置回到第 0 项" }
+      - { bits: "3", name: RESET_FIFOS, reset: 1, desc: "复位 FIFO。QEMU 中与 RESET_STATE 作用相同" }
+      - { bits: "4", name: ACK_TIMEOUT_EN, reset: 1, status: unimplemented, desc: "使用 SIO2_SEND2.ACK_TIMEOUT_PER 指定的应答超时" }
+      - { bits: "5", name: NO_ACK_ERR_DIS, reset: 1, status: unimplemented, desc: "缺少应答信号时不报错（ps2sdk 命名 NO_MISSING_ACK_ERR）" }
+      - { bits: "6", name: 未知, access: RO, reset: 0, status: unimplemented, desc: 只读，读出为 0 }
+      - { bits: "7", name: 未知, reset: 1, status: unimplemented, desc: 可读写，软件通常写 1 }
+      - { bits: "8", name: ERR_IE, reset: 1, status: unimplemented, desc: "传输错误中断允许。QEMU 不检查" }
+      - { bits: "9", name: COMP_IE, reset: 1, status: unimplemented, desc: "传输完成中断允许。QEMU 不检查，START 总是发出中断" }
+      - { bits: "11:10", name: 未知, reset: 0, status: unimplemented, desc: 可读写，软件通常写 0 }
+      - { bits: "29:12", name: 未知, access: RO, reset: 0, status: unimplemented, desc: 只读，读出为 0（QEMU 中可写入并读回） }
+      - { bits: "30", name: PS1_MODE, reset: 0, status: unimplemented, desc: PS1 模式允许 }
+      - { bits: "31", name: SLAVE_MODE, reset: 0, status: unimplemented, desc: 从模式允许 }
+    ops:
+      - 按 SIO2MAN 的流程：写 CTRL | 0x0C 复位；写 SEND1/SEND2/SEND3；写 DATAIN 或启动 SIO2in、SIO2out DMA；写 CTRL | 0x01 启动；等待 IOP 第 17 号中断。
+    notes:
+      - 复位值 0x3BC 是 BIOS 中 SIO2MAN 复位后写入的值（PCSX2 SioTypes.h:118），QEMU 以它作为复位值；真实硬件上电后的值没有资料。
+      - QEMU 不模拟传输时间，也不受 ERR_IE、COMP_IE 控制。
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:77-95"
+      - "PCSX2 pcsx2/SIO/SioTypes.h:112-119（Sio2Ctrl）"
+      - "PCSX2 pcsx2/SIO/Sio2.cpp:101-119"
+      - "ps2tek §SIO2 Registers"
+      - "QEMU hw/misc/ps2_sio2.c（ps2_sio2_write_ctrl）"
+
+  - name: SIO2_RECV1
+    addr: 0x1F80826C
+    offset: 0x6C
+    access: RO
+    reset: 0x0001D100
+    brief: 传输状态：队列位置、空闲、应答缺失与各项错误
+    desc: >-
+      传输结束后的状态。软件据此判断外设是否连接：ps2tek 记载，存储卡命令后 (RECV1 & 0xF000) == 0x1000
+      表示存储卡已连接；手柄命令后第 13 位为 0 表示手柄已连接。已知的“无设备”值为 0x1D100，“已连接”值为 0x1100。
+      QEMU 按 PCSX2 的做法合成该值：每处理完一条外设选择字节为 0x01（手柄）或 0x21（多分插适配器）的命令，
+      第 11:8 位在第一条命令时置为 1，此后在 2、3 之间交替，并或上“端口 0 无设备”0x1D000（SEND3.PORT = 0，PCSX2 称 PORT_1_MISSING）
+      或“端口 1 无设备”0x2D000（SEND3.PORT = 1，PCSX2 称 PORT_2_MISSING；多分插适配器命令总是 0x1D000）；其他外设选择字节使 RECV1 = 0x1D100。写 SEND3[0] 时清零。
+      QEMU 中该寄存器可以写入。
+    fields:
+      - { bits: "3:0", name: 未知, reset: 0, status: reference, desc: 含义不明 }
+      - { bits: "4", name: NEED_TX_DMA, reset: 0, status: reference, desc: 需要 DMA 送入更多发送数据才能完成传输 }
+      - { bits: "5", name: NEED_RX_DMA, reset: 0, status: reference, desc: 需要 DMA 取走更多接收数据才能完成传输 }
+      - { bits: "7:6", name: 未知, reset: 0, status: reference, desc: 含义不明 }
+      - { bits: "11:8", name: QUEUE_SLOT, reset: 1, status: reference, desc: "下一个要处理的队列项编号（0–15）。PCSX2 与 QEMU 把 1、2 解释为“已打开一个 / 两个端口”" }
+      - { bits: "12", name: IDLE, reset: 1, status: reference, desc: 传输进行中为 0，空闲（或传输完成）时为 1 }
+      - { bits: "13", name: ERR_TX_FIFO, reset: 0, status: reference, desc: 发送 FIFO 上溢或下溢（ps2sdk 注明对应关系不确定） }
+      - { bits: "14", name: ERR_RX_FIFO, reset: 1, status: reference, desc: 接收 FIFO 上溢或下溢（同上） }
+      - { bits: "15", name: ERR_NO_ACK, reset: 1, status: reference, desc: 外设没有应答 }
+      - { bits: "31:16", name: ERR_SLOT, reset: 1, status: reference, desc: "第 16 + n 位为 1 表示队列第 n 项出错。PCSX2 把第 16、17 位解释为“端口 1、端口 2 无设备”（0x1D000、0x2D000、0x3D000）" }
+    notes:
+      - 位域含义来自 ps2sdk 的逆向定义（参考级）；QEMU 只生成上述几种组合值，不按位模拟。整体取值由 qtest ps2/sio2、ps2/sio2/dma 验证。
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:98-112"
+      - "PCSX2 pcsx2/SIO/SioTypes.h:122-136（CmdStat）"
+      - "ps2tek §SIO2 Registers"
+      - "QEMU hw/misc/ps2_sio2.c（ps2_sio2_dispatch）"
+
+  - name: SIO2_RECV2
+    addr: 0x1F808270
+    offset: 0x70
+    access: RO
+    reset: 0x0000000F
+    status: unimplemented
+    brief: 设备连接检测状态
+    desc: >-
+      端口 0–3 的设备连接检测状态。PADMAN 会读取该寄存器，ps2tek 记载其值总是 0xF。
+      QEMU 复位为 0x0000000F，此后只保存写入值。
+    fields:
+      - { bits: "3:0", name: CDC, reset: 0xF, desc: "端口 3–0 的连接检测（CDC0–CDC3，第 n 位对应端口 n）" }
+      - { bits: "7:4", name: SAS, reset: 0, desc: "端口 3–0 的 SAS 信号（SAS0–SAS3）。ps2sdk 注明只有早期机型（约 SCPH-30000 及以前）的 SAS0、SAS1 接到物理接口" }
+      - { bits: "31:8", name: 未知, reset: 0, desc: 含义不明 }
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:114-123"
+      - "PCSX2 pcsx2/SIO/SioTypes.h:138-141（PortStat）"
+      - "ps2tek §SIO2 Registers"
+
+  - name: SIO2_RECV3
+    addr: 0x1F808274
+    offset: 0x74
+    access: RO
+    reset: 0x00000000
+    status: unimplemented
+    brief: FIFO 状态：发送 / 接收字节数与溢出标志
+    desc: SIO2 FIFO 状态。QEMU 复位为 0，此后只保存写入值。
+    fields:
+      - { bits: "8:0", name: TX_SZ, reset: 0, desc: 发送 FIFO 中的字节数，0–256 }
+      - { bits: "9", name: 未知, reset: 0, desc: 含义不明 }
+      - { bits: "10", name: TX_OVF, reset: 0, desc: 发送 FIFO 上溢 }
+      - { bits: "11", name: TX_UNF, reset: 0, desc: 发送 FIFO 下溢 }
+      - { bits: "15:12", name: 未知, reset: 0, desc: 含义不明 }
+      - { bits: "24:16", name: RX_SZ, reset: 0, desc: 接收 FIFO 中的字节数，0–256 }
+      - { bits: "25", name: 未知, reset: 0, desc: 含义不明 }
+      - { bits: "26", name: RX_OVF, reset: 0, desc: 接收 FIFO 上溢 }
+      - { bits: "27", name: RX_UNF, reset: 0, desc: 接收 FIFO 下溢 }
+      - { bits: "31:28", name: 未知, reset: 0, desc: 含义不明 }
+    notes:
+      - PCSX2 在存储卡命令后向该寄存器写入 0x83、0x8B、0x8C 等值，并注明这些值的用途不明（SioTypes.h:143-157）。
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:125-136"
+      - "PCSX2 pcsx2/SIO/SioTypes.h:143-157（FifoStat）"
+      - "ps2tek §SIO2 Registers"
+
+  - name: SIO2_FIFO_TX
+    addr: 0x1F808278
+    offset: 0x78
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    nodetail: true
+    brief: 发送 FIFO 指针（QEMU 只保存）
+    source: ["ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:138", "PCSX2 pcsx2/IopHw.h:73"]
+
+  - name: SIO2_FIFO_RX
+    addr: 0x1F80827C
+    offset: 0x7C
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    nodetail: true
+    brief: 接收 FIFO 指针（QEMU 只保存）
+    source: ["ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:143", "PCSX2 pcsx2/IopHw.h:74"]
+
+  - name: SIO2_ISTAT
+    addr: 0x1F808280
+    offset: 0x80
+    access: R/W1C
+    reset: 0x00000000
+    brief: 中断状态（写 1 清零）
+    desc: >-
+      SIO2 中断状态。传输完成时 TR_COMP 置 1，同时向 IOP INTC 发出第 17 号中断。SIO2MAN 的中断处理程序
+      读出该寄存器后把读出值写回，以清除状态位。QEMU 中只有 ISTAT 为 0 时启动传输才会发出中断脉冲，
+      因此必须清除 TR_COMP 后才能收到下一次中断。
+    fields:
+      - { bits: "0", name: TR_COMP, access: R/W1C, reset: 0, desc: 传输完成 }
+      - { bits: "1", name: TR_ERR, access: R/W1C, reset: 0, status: unimplemented, desc: "传输出错（任一错误）。QEMU 从不置位" }
+      - { bits: "31:2", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+    source:
+      - "ps2sdk iop/sio/mx4sio_bd/src/sio2regs.h:145-148"
+      - "PCSX2 pcsx2/SIO/Sio2.cpp:101-109（Interrupt）"
+      - "ps2tek §SIO2 Registers"
+      - "QEMU hw/misc/ps2_sio2.c（ps2_sio2_irq）"

@@ -1,0 +1,323 @@
+# R5900 系统控制协处理器 COP0 寄存器。CP0 寄存器没有总线地址，
+# offset 写 CP0 寄存器编号（MFC0/MTC0 指令的 rd 字段）。
+# 编号是寄存器号而不是地址，故 verified 寄存器均以 check 跳过地址核对。
+block: ee-cop0
+title: EE 核心 COP0 寄存器
+page: /chapters/03-ee-core
+access_size: 32 位，仅 MFC0/MTC0（R5900 没有 DMFC0/DMTC0）
+width: 32
+status: verified
+qemu:
+  files:
+    - target/mips/cpu.h
+    - target/mips/cpu-defs.c.inc
+    - target/mips/internal.h
+    - target/mips/system/cp0.c
+    - target/mips/system/cp0_timer.c
+    - target/mips/tcg/system/cp0_helper.c
+    - target/mips/tcg/system/tlb_helper.c
+    - target/mips/tcg/system/special_helper.c
+    - target/mips/tcg/translate.c
+    - hw/mips/ps2_ee.c
+registers:
+  - name: Index
+    offset: 0
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: TLBR、TLBWI 访问的 TLB 项号；TLBP 结果
+    desc: 指定 TLBR、TLBWI 读写的 TLB 项。TLBP 在 TLB 中查找与 EntryHi 匹配的项，找到时把项号写入 Index 并清零 P 位，找不到时 P 位置 1。
+    fields:
+      - { bits: "31", name: P, access: RO, status: reference, desc: 探测失败标志。TLBP 未找到匹配项时置 1。QEMU 已实现，但没有测试覆盖 }
+      - { bits: "5:0", name: Index, desc: TLB 项号，有效范围 0–47。写入大于 47 的值无效 }
+    notes:
+      - qtest ps2/scratchpad 覆盖 MTC0 写 Index 后的 TLBWI、TLBR，以及 TLBP 找到匹配项时写回的项号；TLBP 失败置 P 位的情形没有测试覆盖。
+    source: ["ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/cp0_helper.c（helper_mtc0_index）"]
+  - name: Random
+    offset: 1
+    check: CP0 寄存器编号，无总线地址
+    access: RO
+    reset: 47
+    brief: TLBWR 使用的随机项号
+    desc: TLBWR 写入的 TLB 项号，取值在 Wired 与 47 之间变化，用于随机替换 TLB 项。写 Wired 时 Random 复位为 47。
+    fields:
+      - { bits: "5:0", name: Random, reset: 47, desc: 随机项号，下界为 Wired，上界为 47 }
+    notes:
+      - 硬件中 Random 每执行一条指令减 1；QEMU 用伪随机数产生该值，只保证取值范围。
+    source: ["ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/cp0_helper.c"]
+  - name: EntryLo0
+    offset: 2
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: TLB 项偶数页的低半部分，含 S 位
+    desc: TLBWI、TLBWR 时写入 TLB 项偶数页（VPN2×2）的映射；TLBR 时读出。第 31 位 S 是 R5900 新增的暂存存储器选择位，只在 EntryLo0 中有效。
+    fields:
+      - { bits: "31", name: S, desc: 暂存存储器选择。置 1 时该 TLB 项把 VPN2 起的 16 KB 映射到 SPR，忽略 PFN、C、D、V 和 PageMask，可读可写可执行 }
+      - { bits: "25:6", name: PFN, desc: 页帧号，即物理地址的第 31:12 位 }
+      - name: C
+        bits: "5:3"
+        status: unimplemented
+        desc: 缓存方式。QEMU 保存该值，TLBR 可读回，但不区分缓存方式
+        values: { "2": 不缓存（uncached）, "3": "缓存（cached，写回）", "7": 不缓存加速（uncached accelerated）}
+      - { bits: "2", name: D, desc: 可写。为 0 时写该页产生 TLB Modified 异常 }
+      - { bits: "1", name: V, desc: 有效。为 0 时访问该页产生 TLB Invalid 异常 }
+      - { bits: "0", name: G, desc: 全局。TLB 项的 G 为 EntryLo0.G 与 EntryLo1.G 的逻辑与；为 1 时忽略 ASID }
+    ops:
+      - 映射 SPR：EntryHi 写 0x70000000（ASID 任意），EntryLo0 写 0x80000006（S=1、D=1、V=1），EntryLo1 写 0x00000006 或 0，PageMask 写 0，执行 TLBWI。
+    notes:
+      - TLBR 读出的 EntryLo0 保留 S 位（与写入值一致）；PCSX2 读出时屏蔽 S 位。
+      - S 项的 VPN2 若不是 16 KB 对齐，QEMU 把所在的 16 KB 块整块映射到 SPR。
+    source: ["PCSX2 pcsx2/R5900.h:197", "ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/tlb_helper.c（r4k_fill_tlb、r4k_map_address）"]
+  - name: EntryLo1
+    offset: 3
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: TLB 项奇数页的低半部分
+    desc: 格式同 EntryLo0，但没有 S 位，对应 TLB 项的奇数页（VPN2×2+1）。
+    fields:
+      - { bits: "25:6", name: PFN, desc: 页帧号，即物理地址的第 31:12 位 }
+      - { bits: "5:3", name: C, status: unimplemented, desc: 缓存方式，取值同 EntryLo0.C }
+      - { bits: "2", name: D, desc: 可写 }
+      - { bits: "1", name: V, desc: 有效 }
+      - { bits: "0", name: G, desc: 全局 }
+    source: ["ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/cp0_helper.c"]
+  - name: Context
+    offset: 4
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    status: reference
+    brief: 页表项指针，供 TLB 重填处理程序使用
+    desc: 发生 TLB 异常时，硬件把出错虚拟地址的 VPN2 写入 BadVPN2。软件预先在 PTEBase 中写入页表基址，重填处理程序可直接用 Context 的值作为页表项地址。
+    fields:
+      - { bits: "31:23", name: PTEBase, desc: 页表基址，由软件写入 }
+      - { bits: "22:4", name: BadVPN2, access: RO, desc: 出错虚拟地址的第 31:13 位 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU target/mips/tcg/system/cp0_helper.c（helper_mtc0_context）"]
+  - name: PageMask
+    offset: 5
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: TLB 项的页大小
+    desc: TLBWI、TLBWR 时写入 TLB 项的页大小掩码。一个 TLB 项映射一对相邻的页（偶数页与奇数页）。
+    fields:
+      - name: MASK
+        bits: "24:13"
+        desc: 页大小掩码
+        values: { "0x000": 4 KB, "0x003": 16 KB, "0x00F": 64 KB, "0x03F": 256 KB, "0x0FF": 1 MB, "0x3FF": 4 MB, "0xFFF": 16 MB }
+    source: ["ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/cp0_helper.c（helper_mtc0_pagemask）"]
+  - name: Wired
+    offset: 6
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    reset: 0
+    brief: 固定 TLB 项数，Random 的下界
+    desc: 项号小于 Wired 的 TLB 项不会被 TLBWR 替换。写 Wired 时 Random 复位为 47。
+    fields:
+      - { bits: "5:0", name: Wired, reset: 0, desc: Random 的下界 }
+    source: ["ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/cp0_helper.c（helper_mtc0_wired）"]
+  - name: BadVAddr
+    offset: 8
+    check: CP0 寄存器编号，无总线地址
+    access: RO
+    status: reference
+    brief: 出错的虚拟地址
+    desc: 发生 TLB Refill、TLB Invalid、TLB Modified 或地址错误异常时，记录出错的虚拟地址。
+    notes:
+      - QEMU 已实现，但没有测试覆盖：qtest ps2/r5900-addr 检查地址错误异常的 Cause 与 EPC，不读 BadVAddr。
+      - QEMU 在翻译时写 BadVAddr，已缓存的翻译块可能使其保持旧值（记录 R25-13，上游问题）。
+    source: ["ps2tek §EE COP0 Exception Handling", "QEMU target/mips/tcg/system/tlb_helper.c"]
+  - name: Count
+    offset: 9
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    status: reference
+    brief: 时钟计数器
+    desc: 每个 CPU 时钟周期加 1（294.912 MHz）。与 Compare 相等时置位 Cause.IP7。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §EE COP0 Timer", "QEMU target/mips/cpu-defs.c.inc（CCRes = 1）", "QEMU hw/mips/ps2_ee.c（cpu_mips_clock_init）"]
+  - name: EntryHi
+    offset: 10
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: TLB 项的高半部分：VPN2 与 ASID
+    desc: TLBWI、TLBWR 写入 TLB 项的虚拟页号与地址空间标识；TLBP 用它查找；发生 TLB 异常时硬件把出错地址的 VPN2 写入此处。ASID 同时作为当前地址空间标识参与地址转换。
+    fields:
+      - { bits: "31:13", name: VPN2, desc: 虚拟页号除以 2（一对页的公共部分） }
+      - { bits: "7:0", name: ASID, desc: 地址空间标识 }
+    source: ["ps2tek §EE COP0 Memory Management", "QEMU target/mips/tcg/system/cp0_helper.c（helper_mtc0_entryhi）"]
+  - name: Compare
+    offset: 11
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    status: reference
+    brief: 定时器比较值
+    desc: Count 等于 Compare 时 Cause.IP7 置 1。写 Compare 清除 IP7。
+    ops:
+      - 设定定时中断：读 Count，加上间隔后写入 Compare；置 1 Status.IM7，并保证 IE、EIE 为 1。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §EE COP0 Timer", "QEMU target/mips/system/cp0_timer.c（cpu_mips_store_compare）"]
+  - name: Status
+    offset: 12
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00400004
+    brief: 处理器状态：中断允许、运行模式、协处理器可用
+    desc: R5900 的 Status 在 MIPS III 基础上增加了 EIE（总中断允许）、EDI、BEM、CH、DEV 等位，中断屏蔽位只有 IM2、IM3、IM7。QEMU 的可写位掩码为 0xF4C79C1F。中断被响应的条件为 IE=1、EIE=1、EXL=0、ERL=0，且 Cause.IP 与 IM 有共同的 1 位。
+    fields:
+      - { bits: "31:28", name: CU, reset: 0, desc: 协处理器 3–0 可用位。CU0=0 时用户模式下执行 COP0 指令（含 EI、DI、BC0x）产生协处理器不可用异常；CU1、CU2 控制 FPU 与 VU0 宏指令 }
+      - { bits: "23", name: DEV, status: unimplemented, desc: 为 1 时第 2 级异常（性能计数、调试）使用引导向量 0xBFC00xxx。QEMU 仅保存 }
+      - { bits: "22", name: BEV, reset: 1, status: reference, desc: 为 1 时第 1 级异常使用引导向量 0xBFC00200 起的地址。QEMU 已实现，但没有测试覆盖（R17-09(a)） }
+      - { bits: "18", name: CH, status: unimplemented, desc: 最近一条 CACHE 命中检测指令的结果。QEMU 不模拟缓存，仅保存 }
+      - { bits: "17", name: EDI, desc: 为 1 时允许在内核模式以外执行 EI、DI；为 0 时非内核模式下 EI、DI 无效（按空操作处理） }
+      - { bits: "16", name: EIE, reset: 0, desc: 总中断允许，由 EI 置 1、DI 清零，也可用 MTC0 写入 }
+      - { bits: "15", name: IM7, status: reference, desc: 允许 COP0 定时器中断（Count = Compare）。QEMU 已实现，但没有测试覆盖 }
+      - { bits: "12", name: BEM, status: unimplemented, desc: 总线错误屏蔽，为 1 时不产生总线错误异常。QEMU 仅保存 }
+      - { bits: "11", name: IM3, desc: 允许 INT1 中断（DMAC） }
+      - { bits: "10", name: IM2, desc: 允许 INT0 中断（INTC） }
+      - name: KSU
+        bits: "4:3"
+        reset: 0
+        desc: 运行模式（EXL、ERL 均为 0 时有效）
+        values: { "0": 内核模式, "1": 管理模式, "2": 用户模式 }
+      - { bits: "2", name: ERL, reset: 1, status: reference, desc: 错误级。复位、NMI 及第 2 级异常时置 1，此时处理器处于内核模式且中断被屏蔽。QEMU 已实现，但没有测试覆盖（R17-09(a)） }
+      - { bits: "1", name: EXL, reset: 0, desc: 异常级。第 1 级异常时置 1，ERET 清零 }
+      - { bits: "0", name: IE, reset: 0, desc: 中断允许 }
+    ops:
+      - 允许 INTC 中断：Status |= 0x00010401（EIE、IM2、IE），或先置 IM2、IE，再执行 EI。
+      - 临界区：执行 DI 关闭 EIE，处理完毕后执行 EI，不必改动 IE 与 IM。
+    notes:
+      - 复位值 0x00400004 为 QEMU 复位时的值（BEV=1、ERL=1）。PCSX2 复位时还置 1 CU0–CU2（0x70400004）。
+      - 第 26 位在 QEMU 的可写位掩码中（继承通用 MIPS 的 FR 位），R5900 资料未定义该位，程序应写 0。
+      - qtest ps2/cop0、ps2/fpu、ps2/cop2 覆盖 CU0–CU2、EDI、EIE、IM3、IE、EXL 与用户模式（KSU = 2）；管理模式（KSU = 1）下的 EI/DI 没有测试覆盖。
+    source: ["ps2tek §EE COP0 Exception Handling", "PCSX2 pcsx2/R5900.cpp:69", "PCSX2 pcsx2/COP0.cpp:666", "QEMU target/mips/cpu-defs.c.inc（CP0_Status_rw_bitmask）", "QEMU target/mips/tcg/system/special_helper.c（helper_r5900_eidi）", "QEMU target/mips/internal.h（cpu_mips_hw_interrupts_enabled）"]
+  - name: Cause
+    offset: 13
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: 最近一次异常的原因与中断请求
+    desc: 异常发生时由硬件写入异常码、延迟槽标志与出错的协处理器号；IP 位反映中断输入的当前状态。
+    fields:
+      - { bits: "31", name: BD, desc: 第 1 级异常发生在分支延迟槽中。此时 EPC 指向分支指令 }
+      - { bits: "30", name: BD2, status: unimplemented, desc: 第 2 级异常发生在分支延迟槽中，ErrorEPC 指向分支指令 }
+      - { bits: "29:28", name: CE, desc: 协处理器不可用异常对应的协处理器号 }
+      - name: EXC2
+        bits: "18:16"
+        status: unimplemented
+        desc: 第 2 级异常码
+        values: { "0": 复位, "1": NMI, "2": 性能计数器, "3": 调试 }
+      - { bits: "15", name: IP7, access: RO, status: reference, desc: COP0 定时器中断请求。QEMU 已实现，但没有测试覆盖 }
+      - { bits: "11", name: IP3, access: RO, desc: INT1（DMAC）中断请求 }
+      - { bits: "10", name: IP2, access: RO, desc: INT0（INTC）中断请求 }
+      - { bits: "9:8", name: IP1:0, access: R/W, status: reference, desc: 软件中断请求，可用 MTC0 写入（通用 MIPS 行为，ps2tek 未列出）。QEMU 已实现，但没有测试覆盖 }
+      - name: ExcCode
+        bits: "6:2"
+        desc: 第 1 级异常码
+        values:
+          "0x00": Int，中断
+          "0x01": Mod，TLB 修改
+          "0x02": TLBL，TLB 缺失或无效（取指、读）
+          "0x03": TLBS，TLB 缺失或无效（写）
+          "0x04": AdEL，地址错误（取指、读）
+          "0x05": AdES，地址错误（写）
+          "0x06": IBE，总线错误（取指）
+          "0x07": DBE，总线错误（数据）
+          "0x08": Sys，SYSCALL
+          "0x09": Bp，BREAK
+          "0x0A": RI，保留指令
+          "0x0B": CpU，协处理器不可用
+          "0x0C": Ov，算术溢出
+          "0x0D": Tr，自陷
+    notes:
+      - QEMU 中第 9:8 位（软件中断 IP1、IP0）可用 MTC0 写入，这是通用 MIPS 行为；ps2tek 未列出这两位。
+    source: ["ps2tek §EE COP0 Exception Handling", "QEMU target/mips/tcg/system/tlb_helper.c（mips_cpu_do_interrupt）", "QEMU hw/mips/ps2_ee.c（env->irq[2]、env->irq[3]）"]
+  - name: EPC
+    offset: 14
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    brief: 第 1 级异常返回地址
+    desc: 第 1 级异常时写入出错指令的地址；若出错指令在延迟槽中，则写入分支指令的地址。EXL=1 时再次发生异常不更新 EPC。ERET 在 ERL=0 时返回到 EPC。
+    source: ["ps2tek §EE COP0 Exception Handling", "QEMU target/mips/tcg/system/tlb_helper.c"]
+  - name: PRId
+    offset: 15
+    check: CP0 寄存器编号，无总线地址
+    access: RO
+    reset: 0x00002E20
+    brief: 处理器标识
+    desc: 实现号 0x2E 标识 R5900。修订号随芯片版本而异。
+    fields:
+      - { bits: "15:8", name: Imp, reset: 0x2E, desc: 实现号 }
+      - { bits: "7:0", name: Rev, reset: 0x20, desc: 修订号 }
+    source: ["PCSX2 pcsx2/R5900.cpp:70", "QEMU target/mips/cpu-defs.c.inc（CP0_PRid）"]
+  - name: Config
+    offset: 16
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000442
+    status: reference
+    brief: 缓存大小、KSEG0 缓存方式与流水线功能开关
+    desc: 报告指令缓存与数据缓存的大小，设置 KSEG0 的缓存方式，并控制分支预测、非阻塞读、双发射等功能。QEMU 只允许写 K0 位域，其余位保持复位值。
+    fields:
+      - { bits: "30:28", name: EC, access: RO, status: unimplemented, desc: 总线时钟比例 }
+      - { bits: "18", name: DIE, status: unimplemented, desc: 双发射允许 }
+      - { bits: "17", name: ICE, status: unimplemented, desc: 指令缓存允许 }
+      - { bits: "16", name: DCE, status: unimplemented, desc: 数据缓存允许 }
+      - { bits: "13", name: NBE, status: unimplemented, desc: 非阻塞读允许 }
+      - { bits: "12", name: BPE, status: unimplemented, desc: 分支预测允许 }
+      - { bits: "11:9", name: IC, access: RO, reset: 2, desc: 指令缓存大小 2^(12+IC) 字节，2 表示 16 KB }
+      - { bits: "8:6", name: DC, access: RO, reset: 1, desc: 数据缓存大小 2^(12+DC) 字节，1 表示 8 KB }
+      - name: K0
+        bits: "2:0"
+        reset: 2
+        desc: KSEG0 的缓存方式。QEMU 保存该值，但不模拟缓存
+        values: { "2": 不缓存, "3": 缓存 }
+    notes:
+      - PCSX2 写 Config 时保持第 11:6 位为 0x440 对应的值，其余位可写；复位值为 0x440。
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/COP0.cpp:30", "PCSX2 pcsx2/R5900.cpp:68", "QEMU target/mips/cpu-defs.c.inc（CP0_Config0）", "QEMU target/mips/tcg/system/cp0_helper.c（helper_mtc0_config0）"]
+  - name: BadPAddr
+    offset: 23
+    status: unimplemented
+    access: RO
+    brief: 总线错误的物理地址
+    desc: Status.BEM=0 时发生总线错误，记录出错的物理地址。QEMU 中 CP0 第 23 号寄存器按通用 MIPS 的 EJTAG Debug 寄存器处理，不是 BadPAddr。
+    source: ["ps2tek §EE COP0 Exception Handling"]
+  - name: Debug
+    offset: 24
+    status: unimplemented
+    access: R/W
+    brief: 硬件断点寄存器组（按 sel 选择）
+    desc: 包括断点控制以及指令地址、数据地址、数据值断点及其掩码，由 MFC0/MTC0 的 sel 字段选择。命中时产生第 2 级调试异常，向量 0x80000100。QEMU 未模拟。
+    source: ["ps2tek §EE COP0 Registers"]
+  - name: Perf
+    offset: 25
+    status: unimplemented
+    access: R/W
+    brief: 性能计数器控制与两个计数器（按 sel 选择）
+    desc: 包括性能计数器控制寄存器与两个计数器，可统计周期、缓存缺失、分支预测失败等事件；计数溢出时产生第 2 级性能计数异常，向量 0x80000080。QEMU 未模拟。
+    source: ["ps2tek §EE COP0 Registers"]
+  - name: TagLo
+    offset: 28
+    status: unimplemented
+    access: R/W
+    brief: 缓存标记低位，供 CACHE 指令读写
+    desc: CACHE 指令的索引读/写标记操作经 TagLo、TagHi 交换缓存行的标记。QEMU 不模拟缓存。
+    source: ["ps2tek §EE COP0 Caches"]
+  - name: TagHi
+    offset: 29
+    status: unimplemented
+    access: R/W
+    brief: 缓存标记高位
+    desc: 与 TagLo 配合使用。QEMU 不模拟缓存。
+    source: ["ps2tek §EE COP0 Caches"]
+  - name: ErrorEPC
+    offset: 30
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    status: reference
+    brief: 第 2 级异常返回地址
+    desc: 复位、NMI 及第 2 级异常时写入返回地址。ERET 在 ERL=1 时返回到 ErrorEPC 并清零 ERL。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2tek §EE COP0 Exception Handling", "QEMU target/mips/tcg/system/special_helper.c"]

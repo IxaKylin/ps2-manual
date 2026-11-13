@@ -1,0 +1,66 @@
+:root {
+  --ps2-ee: #2f6fb2;
+  --ps2-gfx: #7a4bb3;
+  --ps2-iop: #2e8b57;
+  --ps2-mem: #c07a1a;
+  --vp-layout-max-width: 1760px;
+  --vp-code-font-size: 0.9em;
+}
+
+/* Larger body text and a wider content column; the outline sits at the right edge. */
+.vp-doc p, .vp-doc li { font-size: 17px; line-height: 30px; }
+.vp-doc table { font-size: 15px; }
+@media (min-width: 1280px) {
+  .VPDoc .container { justify-content: space-between !important; }
+  .VPDoc.has-aside .content-container { max-width: 1000px !important; }
+  .VPDoc .content { flex-grow: 1; }
+  .VPDoc .aside { max-width: 240px; }
+}
+.VPDocAsideOutline .outline-link { font-size: 14px; }
+
+/* Click-to-zoom figures (medium-zoom). */
+.vp-doc img { cursor: zoom-in; }
+.medium-zoom-overlay { z-index: 100; }
+.medium-zoom-image--opened { z-index: 101; cursor: zoom-out; background: #fff; }
+
+.ps2-status {
+  display: inline-block;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.ps2-status-verified { background: #e3f4e8; color: #19633a; border-color: #9fd3b0; }
+.ps2-status-reference { background: #fff4dc; color: #7a5300; border-color: #f0cf85; }
+.ps2-status-unimplemented { background: #eceef1; color: #525866; border-color: #c8ccd3; }
+.dark .ps2-status-verified { background: #163a25; color: #9fe0b5; border-color: #2c6b45; }
+.dark .ps2-status-reference { background: #3b2f12; color: #f3d38c; border-color: #6d5520; }
+.dark .ps2-status-unimplemented { background: #2a2d33; color: #b4b9c2; border-color: #4a4f58; }
+
+.ps2-reg { margin: 8px 0 28px; }
+.ps2-reg table { margin: 8px 0; }
+.ps2-reg-head th { white-space: nowrap; background: var(--vp-c-bg-soft); }
+.ps2-reg-desc { margin: 6px 0; }
+.ps2-fields td:first-child, .ps2-fields td:nth-child(2) { white-space: nowrap; }
+.ps2-values { margin: 4px 0 0 !important; font-size: 13px; }
+.ps2-values td { padding: 2px 8px !important; }
+.ps2-label { font-weight: 600; margin-top: 10px; }
+.ps2-src { font-size: 13px; color: var(--vp-c-text-2); margin-top: 6px; }
+.ps2-error { color: #c62828; font-weight: 600; }
+.ps2-summary-meta { color: var(--vp-c-text-2); }
+
+.ps2-bitfield { display: block; max-width: 100%; height: auto; margin: 10px 0; }
+.ps2-bitfield .bf-num { font: 9px var(--vp-font-family-mono); fill: var(--vp-c-text-2); }
+.ps2-bitfield .bf-cell { fill: #e8f0fb; stroke: #4a6f9e; stroke-width: 1; }
+.ps2-bitfield .bf-res { fill: #eeeeee; stroke: #9aa0a6; stroke-width: 1; }
+.ps2-bitfield .bf-name { font: 11px var(--vp-font-family-mono); fill: #1d3557; }
+.dark .ps2-bitfield .bf-cell { fill: #1f3047; stroke: #6d93c4; }
+.dark .ps2-bitfield .bf-res { fill: #2b2b2b; stroke: #555; }
+.dark .ps2-bitfield .bf-name { fill: #dbe7f7; }
+
+.ps2-figure { text-align: center; margin: 18px 0; }
+.ps2-figure img { margin: 0 auto; background: #fff; border-radius: 6px; }
+.ps2-figure figcaption { font-size: 13px; color: var(--vp-c-text-2); margin-top: 6px; }

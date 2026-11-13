@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 610" width="960" height="610" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="610" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 12-1 IOP 内部结构</text>
+
+  <!-- 上排：CPU 与存储器 -->
+  <rect x="60" y="64" width="260" height="130" rx="6" class="iop"/>
+  <text x="190" y="88" class="h" text-anchor="middle">R3000A 核心</text>
+  <text x="190" y="108" class="s" text-anchor="middle">MIPS I · 36.864 MHz · 无 TLB / FPU</text>
+  <rect x="76" y="120" width="228" height="30" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="190" y="140" class="n" text-anchor="middle">COP0：SR、CAUSE、EPC、PRID</text>
+  <text x="190" y="176" class="s" text-anchor="middle">指令缓存 / 数据缓存（QEMU 不模拟）</text>
+
+  <rect x="350" y="64" width="170" height="70" rx="6" class="mem"/>
+  <text x="435" y="92" class="h" text-anchor="middle">IOP 内存 2 MB</text>
+  <text x="435" y="115" class="s" text-anchor="middle">0x00000000，镜像 ×4</text>
+
+  <rect x="540" y="64" width="170" height="70" rx="6" class="ext"/>
+  <text x="625" y="92" class="n" text-anchor="middle">暂存存储器 1 KB</text>
+  <text x="625" y="115" class="s" text-anchor="middle">0x1F800000</text>
+
+  <rect x="730" y="64" width="190" height="70" rx="6" class="mem"/>
+  <text x="825" y="92" class="h" text-anchor="middle">Boot ROM 4 MB</text>
+  <text x="825" y="115" class="s" text-anchor="middle">0x1FC00000，与 EE 共用</text>
+
+  <line x1="190" y1="194" x2="190" y2="220" class="ln"/>
+  <line x1="435" y1="134" x2="435" y2="220" class="ln"/>
+  <line x1="625" y1="134" x2="625" y2="220" class="ln" stroke-dasharray="5 3"/>
+  <line x1="825" y1="134" x2="825" y2="220" class="ln"/>
+
+  <!-- IOP 总线 -->
+  <line x1="60" y1="220" x2="920" y2="220" class="ibus"/>
+  <text x="222" y="210" class="b">IOP 总线（32 位）</text>
+
+  <!-- 中排：系统外设 -->
+  <line x1="140" y1="220" x2="140" y2="250" class="ln"/>
+  <line x1="370" y1="220" x2="370" y2="250" class="ln"/>
+  <line x1="615" y1="220" x2="615" y2="250" class="ln"/>
+  <line x1="825" y1="220" x2="825" y2="250" class="ln"/>
+
+  <rect x="60" y="250" width="160" height="100" rx="6" class="iop"/>
+  <text x="140" y="276" class="h" text-anchor="middle">中断控制器</text>
+  <text x="140" y="298" class="n" text-anchor="middle">INTC</text>
+  <text x="140" y="318" class="s" text-anchor="middle">0x1F801070</text>
+  <text x="140" y="336" class="s" text-anchor="middle">I_STAT / I_MASK / I_CTRL</text>
+
+  <rect x="240" y="250" width="260" height="100" rx="6" class="iop"/>
+  <text x="370" y="274" class="h" text-anchor="middle">DMA 控制器（13 通道）</text>
+  <rect x="252" y="286" width="114" height="52" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="309" y="307" class="n" text-anchor="middle">第一组</text>
+  <text x="309" y="327" class="s" text-anchor="middle">通道 0–6</text>
+  <rect x="374" y="286" width="114" height="52" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="431" y="307" class="n" text-anchor="middle">第二组</text>
+  <text x="431" y="327" class="s" text-anchor="middle">通道 7–12</text>
+
+  <rect x="520" y="250" width="190" height="100" rx="6" class="iop"/>
+  <text x="615" y="276" class="h" text-anchor="middle">根计数器 ×6</text>
+  <text x="615" y="298" class="n" text-anchor="middle">T0–T2 16 位</text>
+  <text x="615" y="318" class="n" text-anchor="middle">T3–T5 32 位</text>
+  <text x="615" y="338" class="s" text-anchor="middle">0x1F801100 / 0x1F801480</text>
+
+  <rect x="730" y="250" width="190" height="100" rx="6" class="iop"/>
+  <text x="825" y="276" class="h" text-anchor="middle">SSBUS 控制器</text>
+  <text x="825" y="298" class="n" text-anchor="middle">地址窗口与访问时序</text>
+  <text x="825" y="318" class="s" text-anchor="middle">0x1F801000 / 0x1F801400</text>
+  <text x="825" y="338" class="s" text-anchor="middle">ICFG 0x1F801450</text>
+
+  <!-- 中断输出到 CPU -->
+  <path d="M60 300H36V129H60" class="ln" stroke="#b03a2e" marker-end="url(#a)"/>
+  <text x="40" y="240" class="b">IP2</text>
+
+  <!-- SSBUS 外设总线 -->
+  <line x1="825" y1="350" x2="825" y2="400" class="ln"/>
+  <line x1="60" y1="400" x2="920" y2="400" class="ibus"/>
+  <text x="60" y="388" class="b">SSBUS（外设总线）</text>
+
+  <!-- 下排：外设 -->
+  <line x1="113" y1="400" x2="113" y2="430" class="ln"/>
+  <line x1="238" y1="400" x2="238" y2="430" class="ln"/>
+  <line x1="363" y1="400" x2="363" y2="430" class="ln"/>
+  <line x1="488" y1="400" x2="488" y2="430" class="ln"/>
+  <line x1="613" y1="400" x2="613" y2="430" class="ln"/>
+  <line x1="738" y1="400" x2="738" y2="430" class="ln"/>
+  <line x1="863" y1="400" x2="863" y2="430" class="ln" stroke-dasharray="5 3"/>
+
+  <rect x="60" y="430" width="106" height="70" rx="6" class="iop"/>
+  <text x="113" y="460" class="h" text-anchor="middle">SIF</text>
+  <text x="113" y="482" class="s" text-anchor="middle">0x1D000000</text>
+
+  <rect x="185" y="430" width="106" height="70" rx="6" class="iop"/>
+  <text x="238" y="460" class="h" text-anchor="middle">CDVD</text>
+  <text x="238" y="482" class="s" text-anchor="middle">0x1F402000</text>
+
+  <rect x="310" y="430" width="106" height="70" rx="6" class="iop"/>
+  <text x="363" y="460" class="h" text-anchor="middle">SPU2</text>
+  <text x="363" y="482" class="s" text-anchor="middle">0x1F900000</text>
+
+  <rect x="435" y="430" width="106" height="70" rx="6" class="iop"/>
+  <text x="488" y="460" class="h" text-anchor="middle">SIO2</text>
+  <text x="488" y="482" class="s" text-anchor="middle">0x1F808200</text>
+
+  <rect x="560" y="430" width="106" height="70" rx="6" class="iop"/>
+  <text x="613" y="460" class="h" text-anchor="middle">DEV9</text>
+  <text x="613" y="482" class="s" text-anchor="middle">0x1F801460</text>
+
+  <rect x="685" y="430" width="106" height="70" rx="6" class="iop"/>
+  <text x="738" y="460" class="h" text-anchor="middle">USB OHCI</text>
+  <text x="738" y="482" class="s" text-anchor="middle">0x1F801600</text>
+
+  <rect x="810" y="430" width="106" height="70" rx="6" class="ext"/>
+  <text x="863" y="460" class="h" text-anchor="middle">i.LINK</text>
+  <text x="863" y="482" class="s" text-anchor="middle">0x1F808400</text>
+
+  <!-- 与 EE 的连接 -->
+  <line x1="113" y1="500" x2="113" y2="540" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+  <rect x="60" y="540" width="106" height="44" rx="6" class="ee"/>
+  <text x="113" y="567" class="n" text-anchor="middle">EE（SIF DMA）</text>
+
+  <text x="200" y="560" class="s">DMA 接线：通道 4/7 接 SPU2，9/10 接 SIF，11/12 接 SIO2</text>
+  <text x="200" y="578" class="s">中断：各外设与计数器的请求送 INTC，INTC 输出到 R3000A 的 IP2</text>
+  <rect x="680" y="552" width="30" height="16" rx="3" class="ext"/>
+  <text x="718" y="565" class="s">虚线框：QEMU 未实现</text>
+</svg>

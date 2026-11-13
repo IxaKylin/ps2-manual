@@ -1,0 +1,105 @@
+# IOP 根计数器（root counter）寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# 6 个计数器的寄存器格式相同，这里只描述一次，名称写作 Tn_xxx，
+# offset 为相对于计数器基地址的偏移。计数器 n 的基地址：
+#   n = 0–2：0x1F801100 + n × 0x10（16 位计数器）
+#   n = 3–5：0x1F801480 + (n − 3) × 0x10（32 位计数器）
+# 本块不写 base。
+block: iop-rcnt
+title: IOP 根计数器
+page: /chapters/12-iop
+bus: IOP 总线
+access_size: 16 或 32 位；字节访问被忽略（读出 0）
+width: 32
+status: verified
+qemu:
+  files: [include/hw/timer/ps2_iop_rcnt.h, hw/timer/ps2_iop_rcnt.c, hw/mips/ps2_iop.c]
+registers:
+  - name: Tn_COUNT
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    brief: 计数值，n = 0–5（T0–T2 为 16 位，T3–T5 为 32 位）
+    desc: >-
+      计数器的当前值，按 Tn_MODE 选定的时钟递增。写入时把计数值置为写入值（T0–T2 取低 16 位），
+      从写入时刻重新计数。T3–T5 是 32 位计数器，另可用半字访问 +0x2 读写高 16 位（写高半字时低 16 位清零）。
+    fields:
+      - { bits: "15:0", name: COUNT, reset: 0, desc: 计数值低 16 位（T0–T2 的全部计数值） }
+      - { bits: "31:16", name: COUNT_HI, reset: 0, desc: "T3–T5：计数值高 16 位。T0–T2：保留，读出为 0" }
+    source: ["PCSX2 pcsx2/IopHw.h:148-170", "ps2tek §IOP Timers", "QEMU hw/timer/ps2_iop_rcnt.c（ps2_iop_rcnt_read、ps2_iop_rcnt_write）"]
+
+  - name: Tn_MODE
+    offset: 0x04
+    access: R/W
+    reset: 0x00000400
+    brief: 计数器模式：门控、清零方式、中断方式、时钟源、标志
+    desc: >-
+      设定门控、计数清零方式、中断条件与时钟源，并给出中断标志。写 MODE 时计数值清零。
+      读 MODE 返回当前值，同时清除两个中断标志（第 11、12 位）并把第 10 位置 1。
+    fields:
+      - name: GATE
+        bits: "0"
+        reset: 0
+        desc: >-
+          门控允许。T0/T1/T3 的门控信号是场 / 行消隐，QEMU 不模拟（照常计数，并记录 LOG_UNIMP）；
+          T2、T4、T5 没有门控信号，GATE = 1 时由 GMOD 决定是否计数
+      - name: GMOD
+        bits: "2:1"
+        reset: 0
+        desc: 门控方式。QEMU 中对 T2/T4/T5，GMOD 为 0 或 2 时停止计数，为 1 或 3 时照常计数
+      - { bits: "3", name: ZRET, reset: 0, desc: "清零方式。为 1 时计数值达到 TARGET 后回到 0；为 0 时一直计数到溢出" }
+      - { bits: "4", name: CMPE, reset: 0, desc: 目标值匹配中断允许 }
+      - { bits: "5", name: OVFE, reset: 0, desc: 溢出中断允许（T0–T2 在 0xFFFF → 0，T3–T5 在 0xFFFFFFFF → 0） }
+      - name: REPEAT
+        bits: "6"
+        reset: 0
+        desc: 重复中断。为 0 时（单次），对应标志已为 1 期间不再产生中断，直到读 MODE 清除标志；为 1 时每次事件都产生中断
+      - name: LEVL
+        bits: "7"
+        reset: 0
+        desc: 翻转方式。LEVL = 1 且对应中断允许（CMPE / OVFE）为 1 时：IRQEN 为 1 的事件把它翻转为 0；IRQEN 为 0 时仅在 REPEAT = 1 时翻回 1。与 REPEAT 同为 1 时每两次匹配产生一次中断；REPEAT = 0 时只中断一次，直到读或写 MODE
+      - name: EXT
+        bits: "8"
+        reset: 0
+        desc: 外部时钟。T0：像素时钟 13.5 MHz；T1、T3：行消隐（HBLANK）；其他计数器无作用
+        values: { "0": "IOP 时钟 36.864 MHz", "1": "T0 像素时钟 / T1、T3 HBLANK" }
+      - name: DIV8
+        bits: "9"
+        reset: 0
+        desc: T2 预分频，为 1 时时钟为 36.864 MHz / 8。其他计数器无作用
+      - name: IRQEN
+        bits: "10"
+        access: RO
+        reset: 1
+        desc: 中断允许状态（为 1 时可以产生中断）。读 MODE 或写 MODE 时置 1；LEVL = 1 时按 LEVL 位的规则翻转
+      - { bits: "11", name: CMPF, access: R/C, reset: 0, desc: 目标值匹配标志，读 MODE 后清零 }
+      - { bits: "12", name: OVFF, access: R/C, reset: 0, desc: 溢出标志，读 MODE 后清零 }
+      - name: PSC
+        bits: "14:13"
+        reset: 0
+        desc: T4、T5 预分频。其他计数器无作用
+        values: { "0": "1/1", "1": "1/8", "2": "1/16", "3": "1/256" }
+      - { bits: "31:15", name: 保留, access: RO, reset: 0, desc: 写入无效，读出为 0 }
+    ops:
+      - 周期中断（以 T5 为例）：写 T5_TARGET = 周期计数值，再写 T5_MODE = 0x0058（ZRET、CMPE、REPEAT），在 I_MASK 中允许第 16 位。
+      - 中断处理程序中读 Tn_MODE 清除标志，再清 I_STAT 中对应位。
+      - 长时间计时（以 T4 为例）：PSC = 1（36.864 MHz / 8 = 4.608 MHz），32 位计数约 932 s 溢出一次。
+    notes:
+      - QEMU 写 MODE 时保存第 9:0 位与第 14:13 位（掩码 0x63FF），第 11、12 位不可写；若已有标志且对应中断允许，写入保留标志与第 10 位，否则清除标志并置第 10 位。
+      - 溢出先于目标匹配判断：TARGET = 0 时在计数回绕时同时置 OVFF 与 CMPF。
+      - 写 COUNT 使计数值恰好等于 TARGET 时，QEMU 要等计数回绕一周后才产生匹配。
+      - 中断在 QEMU 中为脉冲，第 10 位不会出现短暂的 0。ps2tek 记为 REPEAT = 0 时中断后第 10 位变为 0；QEMU 则保持第 10 位为 1，靠标志位阻止下一次中断。
+    source: ["ps2tek §IOP Timers", "PCSX2 pcsx2/IopCounters.cpp:206-261（_rcntFireInterrupt、_rcntTestTarget）", "QEMU include/hw/timer/ps2_iop_rcnt.h（PS2_IOP_RCNT_MODE_*）", "QEMU tests/qtest/ps2-test.c（test_iop_rcnt）"]
+
+  - name: Tn_TARGET
+    offset: 0x08
+    access: R/W
+    reset: 0x00000000
+    brief: 目标值
+    desc: >-
+      计数值达到 TARGET 时置 CMPF，CMPE = 1 时申请中断；ZRET = 1 时计数值回到 0。
+      写入时按计数器宽度截断（T0–T2 取低 16 位）。T3–T5 另可用半字访问 +0xA 读写高 16 位（写高半字时低 16 位清零）。
+    fields:
+      - { bits: "15:0", name: TARGET, reset: 0, desc: 目标值低 16 位 }
+      - { bits: "31:16", name: TARGET_HI, reset: 0, desc: "T3–T5：目标值高 16 位。T0–T2：保留，读出为 0" }
+    source: ["PCSX2 pcsx2/IopHw.h:164-170", "ps2tek §IOP Timers", "QEMU hw/timer/ps2_iop_rcnt.c"]

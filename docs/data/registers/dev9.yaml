@@ -1,0 +1,322 @@
+# DEV9 扩展接口与 SPEED 芯片寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# 地址为 IOP 物理地址。本块包含两个窗口，因此不写 base：
+#   DEV9 桥接寄存器 0x1F801460–0x1F80147F，offset 相对于 0x1F801460（QEMU PS2_DEV9_xxx）；
+#   SPEED 寄存器 0x10000000 起，offset 相对于 0x10000000（QEMU PS2_SPEED_xxx）。
+# EE 经 SBUS 窗口 0x14000000 访问 SPEED（EE 地址 = IOP 地址 + 0x04000000）。
+# 寄存器名采用 ps2sdk common/include/speedregs.h 的命名；PCSX2 的 SPD_R_REV_1、SPD_R_REV_2 与 ps2sdk 的 SPD_R_REV、SPD_R_REV_1 对应，SPD_R_REV_3 相同。
+block: dev9
+title: DEV9 扩展接口与 SPEED
+page: /chapters/14-peripherals
+bus: IOP 总线
+access_size: 16 位；SPEED 寄存器也接受 8 位访问（访问 16 位寄存器的一半）
+width: 16
+status: verified
+qemu:
+  files: [include/hw/misc/ps2_dev9.h, hw/misc/ps2_dev9.c, hw/mips/ps2.c]
+registers:
+  - name: DEV9_1462
+    addr: 0x1F801462
+    offset: 0x02
+    access: RO
+    reset: 0x0000
+    status: reference
+    brief: 扩展槽设备检测（第 0 位为 0 表示有设备）
+    desc: >-
+      DEV9 桥接寄存器之一，ps2sdk 中没有正式名称（DEV9_R_1462）。QEMU 读出恒为 0，即第 0 位为 0，表示扩展槽中插有设备。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+      - 第 0 位以外各位的含义未见资料。
+    source:
+      - "ps2sdk common/include/dev9regs.h:23"
+      - "QEMU hw/misc/ps2_dev9.c（ps2_dev9_read）"
+
+  - name: DEV9_POWER
+    addr: 0x1F80146C
+    offset: 0x0C
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    brief: 扩展设备电源与复位控制（QEMU 只保存）
+    desc: >-
+      DEV9 驱动经该寄存器为扩展槽中的设备上电、复位。QEMU 只保存写入值，设备总是处于工作状态。
+      各位的含义本书没有可靠来源，不列出。
+    source:
+      - "ps2sdk common/include/dev9regs.h:28（DEV9_R_POWER）"
+      - "QEMU hw/misc/ps2_dev9.c"
+
+  - name: DEV9_REV
+    addr: 0x1F80146E
+    offset: 0x0E
+    access: RO
+    reset: 0x0030
+    status: reference
+    brief: DEV9 控制器类型：0x20 为 PC 卡型，0x30 为扩展槽型
+    desc: >-
+      DEV9 控制器的类型，DEV9 驱动据此选择 PC 卡（早期机型）或扩展槽（后期机型）的初始化流程。
+      QEMU 读出恒为 0x0030，表示扩展槽型控制器。
+    fields:
+      - name: TYPE
+        bits: "7:0"
+        reset: 0x30
+        desc: 控制器类型
+        values: { "0x20": "CXD9566，PC 卡（PCMCIA）型", "0x30": "CXD9611，扩展槽型" }
+      - { bits: "15:8", name: 未知, reset: 0, desc: QEMU 读出为 0 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source:
+      - "ps2sdk common/include/dev9regs.h:29、60-61"
+      - "PCSX2 pcsx2/DEV9/DEV9.h:108（DEV9_R_REV）"
+      - "QEMU hw/misc/ps2_dev9.c（PS2_DEV9_REV_EXPANSION）"
+
+  - name: SPD_REV
+    addr: 0x10000000
+    offset: 0x00
+    access: RO
+    reset: 0x0000
+    status: unimplemented
+    nodetail: true
+    brief: SPEED 版本（QEMU 中只保存写入值，复位后读出 0）
+    source: ["ps2sdk common/include/speedregs.h:33", "PCSX2 pcsx2/DEV9/DEV9.cpp:478-480"]
+
+  - name: SPD_REV_1
+    addr: 0x10000002
+    offset: 0x02
+    access: RO
+    reset: 0x0011
+    brief: SPEED 芯片版本号（QEMU 读出 0x11）
+    desc: >-
+      SPEED 芯片的版本号。QEMU 读出恒为 0x0011，与 PCSX2 相同。经 EE 一侧的 SBUS 窗口读 0x14000002 得到同一值。
+    source:
+      - "ps2sdk common/include/speedregs.h:34"
+      - "PCSX2 pcsx2/DEV9/DEV9.cpp:482-485（PCSX2 称 SPD_R_REV_2）"
+      - "QEMU hw/misc/ps2_dev9.c（PS2_SPEED_REVISION）"
+
+  - name: SPD_REV_3
+    addr: 0x10000004
+    offset: 0x04
+    access: RO
+    reset: 0x0002
+    status: reference
+    brief: SPEED 功能（capabilities）：ATA、SMAP（网络）、UART 等
+    desc: >-
+      SPEED 所连接的功能模块。驱动据此判断扩展设备是否带硬盘接口、网络接口等。
+      QEMU 读出恒为 0x0002，只报告 ATA。
+    fields:
+      - { bits: "0", name: SMAP, reset: 0, desc: 以太网接口 SMAP }
+      - { bits: "1", name: ATA, reset: 1, desc: ATA 硬盘接口 }
+      - { bits: "2", name: 未知, reset: 0, desc: 含义不明 }
+      - { bits: "3", name: UART, reset: 0, desc: 串口（调制解调器） }
+      - { bits: "4", name: DVR, reset: 0, desc: DVR 功能 }
+      - { bits: "5", name: FLASH, reset: 0, desc: 闪存 }
+      - { bits: "15:6", name: 未知, reset: 0, desc: 含义不明 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+      - PCSX2 总是报告 ATA 与 FLASH，并按网络设置报告 SMAP。
+    source:
+      - "ps2sdk common/include/speedregs.h:35-40"
+      - "PCSX2 pcsx2/DEV9/DEV9.cpp:487-496"
+      - "QEMU hw/misc/ps2_dev9.c（PS2_SPEED_CAPS_ATA）"
+
+  - name: SPD_REV_8
+    addr: 0x1000000E
+    offset: 0x0E
+    access: RO
+    reset: 0x0000
+    status: reference
+    nodetail: true
+    brief: 版本寄存器 8；QEMU 读出 0，PCSX2 读出 0x0002（表示插有硬盘模块）。QEMU 已实现，但没有测试覆盖
+    source: ["ps2sdk common/include/speedregs.h:41", "PCSX2 pcsx2/DEV9/DEV9.cpp:498-501（SPD_R_0e）", "QEMU hw/misc/ps2_dev9.c"]
+
+  - name: SPD_DMA_CTRL
+    addr: 0x10000024
+    offset: 0x24
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    brief: SPEED DMA 控制（QEMU 只保存；不模拟 DEV9 DMA）
+    source: ["ps2sdk common/include/speedregs.h:43"]
+
+  - name: SPD_INTR_STAT
+    addr: 0x10000028
+    offset: 0x28
+    access: RO
+    reset: 0x0000
+    brief: SPEED 中断状态（各中断源的当前电平）
+    desc: >-
+      SPEED 的中断状态。每一位反映一个中断源的当前状态，不能由软件写入清除，只能在中断源一侧清除
+      （例如读 ATA 状态寄存器清除 ATA 中断）。任一位与 SPD_INTR_MASK 对应位同为 1 时，SPEED 向 IOP INTC
+      发出第 13 号中断（DEV9）。QEMU 中只有 ATA0 一个中断源，它跟随 ATA 接口的 INTRQ 信号；写入被忽略
+      并记录 guest error。
+    fields:
+      - { bits: "0", name: ATA0, reset: 0, desc: ATA 接口中断 }
+      - { bits: "1", name: ATA1, reset: 0, status: unimplemented, desc: "ATA 第二个中断源（ps2sdk 把 ATA0、ATA1 合称 SPD_INTR_ATA）" }
+      - { bits: "6:2", name: SMAP, reset: 0, status: unimplemented, desc: "以太网接口 SMAP 的中断（TXDNV、RXDNV、TXEND、RXEND、EMAC3，掩码 0x007C）" }
+      - { bits: "8:7", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "9", name: DVR, reset: 0, status: unimplemented, desc: DVR 中断 }
+      - { bits: "11:10", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "12", name: UART, reset: 0, status: unimplemented, desc: 串口中断 }
+      - { bits: "15:13", name: 未知, reset: 0, status: unimplemented, desc: "含义不明；PCSX2 把第 14、15 位用作 ATA FIFO 空 / 满标志" }
+    source:
+      - "ps2sdk common/include/speedregs.h:44-51"
+      - "PCSX2 pcsx2/DEV9/DEV9.h:120-123、144"
+      - "PCSX2 pcsx2/DEV9/DEV9.cpp:445-451、548-550"
+      - "QEMU hw/misc/ps2_dev9.c（ps2_speed_ata_irq）"
+
+  - name: SPD_INTR_MASK
+    addr: 0x1000002A
+    offset: 0x2A
+    access: R/W
+    reset: 0x0000
+    brief: SPEED 中断屏蔽（1 = 允许）
+    desc: >-
+      SPEED 中断允许位，位定义与 SPD_INTR_STAT 相同。(SPD_INTR_STAT & SPD_INTR_MASK) 不为 0 时，DEV9 中断信号有效；
+      写入后立即重新计算，所以打开一个已经有效的中断源会马上发出中断。8 位写入只改变寄存器的对应一半。
+    fields:
+      - { bits: "0", name: ATA0, reset: 0, desc: ATA 接口中断允许 }
+      - { bits: "15:1", name: 其他, reset: 0, status: unimplemented, desc: "其他中断源的允许位，QEMU 只保存（没有对应中断源）" }
+    notes:
+      - PCSX2 注释“8 位写入影响整个寄存器”，与 QEMU 只改变寄存器的高 8 位或低 8 位不同；真实硬件的行为未见资料。
+    source:
+      - "ps2sdk common/include/speedregs.h:45"
+      - "PCSX2 pcsx2/DEV9/DEV9.cpp:449-451、552-559"
+      - "QEMU hw/misc/ps2_dev9.c（ps2_speed_update）"
+
+  - name: SPD_PIO_DIR
+    addr: 0x1000002C
+    offset: 0x2C
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    nodetail: true
+    brief: 通用 I/O 方向，用于访问网络适配器上的串行 EEPROM（QEMU 只保存）
+    source: ["ps2sdk common/include/speedregs.h:52", "PCSX2 pcsx2/DEV9/DEV9.cpp:562-574"]
+
+  - name: SPD_PIO_DATA
+    addr: 0x1000002E
+    offset: 0x2E
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    brief: 通用 I/O 数据：串行 EEPROM 的时钟、片选与数据线
+    desc: >-
+      通用 I/O 数据寄存器。网络适配器上的串行 EEPROM（保存 MAC 地址等）由软件经该寄存器逐位访问。
+      QEMU 只保存写入值，没有 EEPROM。
+    fields:
+      - { bits: "3:0", name: 未知, reset: 0, desc: 含义不明 }
+      - { bits: "4", name: DOUT, reset: 0, desc: "EEPROM 数据输出（读端口）" }
+      - { bits: "5", name: DIN, reset: 0, desc: "EEPROM 数据输入（写端口）" }
+      - { bits: "6", name: SCLK, reset: 0, desc: "EEPROM 时钟（写端口）" }
+      - { bits: "7", name: CSEL, reset: 0, desc: "EEPROM 片选（写端口）" }
+      - { bits: "15:8", name: 未知, reset: 0, desc: 含义不明 }
+    source:
+      - "ps2sdk common/include/speedregs.h:53-61"
+      - "PCSX2 pcsx2/DEV9/DEV9.cpp:575-610"
+
+  - name: SPD_XFR_CTRL
+    addr: 0x10000032
+    offset: 0x32
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    brief: 传输控制（QEMU 只保存）
+    source: ["ps2sdk common/include/speedregs.h:68"]
+
+  - name: SPD_IF_CTRL
+    addr: 0x10000064
+    offset: 0x64
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    brief: 接口控制：第 7 位 ATA 复位，第 2 位 DMA 允许（QEMU 只保存）
+    source: ["ps2sdk common/include/speedregs.h:69-71"]
+
+  - name: SPD_PIO_MODE
+    addr: 0x10000070
+    offset: 0x70
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    brief: ATA PIO 时序模式（QEMU 只保存）；0x72 为 MWDMA 模式，0x74 为 UDMA 模式
+    source: ["ps2sdk common/include/speedregs.h:72-74"]
+
+  - name: ATA_DATA
+    addr: 0x10000040
+    offset: 0x40
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: ATA 数据寄存器（16 位 PIO 数据）。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:567", "QEMU hw/mips/ps2.c（TYPE_MMIO_IDE，shift = 1）"]
+
+  - name: ATA_ERROR
+    addr: 0x10000042
+    offset: 0x42
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: 读为错误寄存器，写为特征（feature）寄存器。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:568-569"]
+
+  - name: ATA_NSECTOR
+    addr: 0x10000044
+    offset: 0x44
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: 扇区数。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:570"]
+
+  - name: ATA_SECTOR
+    addr: 0x10000046
+    offset: 0x46
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: 扇区号（LBA 第 7:0 位）。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:571"]
+
+  - name: ATA_LCYL
+    addr: 0x10000048
+    offset: 0x48
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: 柱面号低字节（LBA 第 15:8 位）。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:572"]
+
+  - name: ATA_HCYL
+    addr: 0x1000004A
+    offset: 0x4A
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: 柱面号高字节（LBA 第 23:16 位）。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:573"]
+
+  - name: ATA_SELECT
+    addr: 0x1000004C
+    offset: 0x4C
+    access: R/W
+    check: "ATA 任务文件寄存器由通用 IDE 模型 hw/ide/mmio.c 以 shift = 1 映射在 PS2_SPEED_ATA_BASE（0x40）之后"
+    nodetail: true
+    brief: 设备 / 磁头选择寄存器
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:574", "QEMU hw/mips/ps2.c"]
+
+  - name: ATA_STATUS
+    addr: 0x1000004E
+    offset: 0x4E
+    access: R/W
+    check: "同 ATA_SELECT，位于 PS2_SPEED_ATA_BASE + 0x0E"
+    nodetail: true
+    brief: 读为状态寄存器（读出时清除 ATA 中断），写为命令寄存器
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:575-576", "QEMU hw/mips/ps2.c"]
+
+  - name: ATA_CONTROL
+    addr: 0x1000005C
+    offset: 0x5C
+    access: R/W
+    status: reference
+    nodetail: true
+    brief: 读为备用状态寄存器，写为设备控制寄存器。QEMU 已实现，但没有测试覆盖
+    source: ["PCSX2 pcsx2/DEV9/DEV9.h:577-578", "QEMU include/hw/misc/ps2_dev9.h（PS2_SPEED_ATA_CTL）"]

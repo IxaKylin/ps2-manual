@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 590" width="960" height="590" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="590" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 8-2 GIFtag 位域与 PACKED 数据包示例</text>
+  <text x="24" y="58" class="s">位域宽度不按比例绘制；灰色为保留位。高 64 位每 4 位一个寄存器描述符，REGS0 最先使用。</text>
+
+  <!-- low 64 bits -->
+  <text x="32" y="92" class="b">低 64 位（第 63:0 位）</text>
+  <rect x="32" y="100" width="70" height="48" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="44" y="120" class="b">NREG</text>
+  <text x="44" y="138" class="s">63:60</text>
+  <rect x="102" y="100" width="56" height="48" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="112" y="120" class="b">FLG</text>
+  <text x="112" y="138" class="s">59:58</text>
+  <rect x="158" y="100" width="150" height="48" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="170" y="120" class="b">PRIM</text>
+  <text x="170" y="138" class="s">57:47</text>
+  <rect x="308" y="100" width="40" height="48" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="316" y="120" class="b">PRE</text>
+  <text x="316" y="138" class="s">46</text>
+  <rect x="348" y="100" width="332" height="48" class="blk" stroke="#8a8f96" fill="#e3e5e8"/>
+  <text x="360" y="120" class="s">保留</text>
+  <text x="360" y="138" class="s">45:16</text>
+  <rect x="680" y="100" width="40" height="48" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="688" y="120" class="b">EOP</text>
+  <text x="688" y="138" class="s">15</text>
+  <rect x="720" y="100" width="208" height="48" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="732" y="120" class="b">NLOOP</text>
+  <text x="732" y="138" class="s">14:0</text>
+
+  <!-- high 64 bits -->
+  <text x="32" y="178" class="b">高 64 位（第 127:64 位）：REGS</text>
+  <rect x="32" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="38" y="206" class="b">REGS15</text>
+  <text x="38" y="224" class="s">127:124</text>
+  <rect x="88" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="94" y="206" class="b">REGS14</text>
+  <text x="94" y="224" class="s">123:120</text>
+  <rect x="144" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="150" y="206" class="b">REGS13</text>
+  <text x="150" y="224" class="s">119:116</text>
+  <rect x="200" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="206" y="206" class="b">REGS12</text>
+  <text x="206" y="224" class="s">115:112</text>
+  <rect x="256" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="262" y="206" class="b">REGS11</text>
+  <text x="262" y="224" class="s">111:108</text>
+  <rect x="312" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="318" y="206" class="b">REGS10</text>
+  <text x="318" y="224" class="s">107:104</text>
+  <rect x="368" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="374" y="206" class="b">REGS9</text>
+  <text x="374" y="224" class="s">103:100</text>
+  <rect x="424" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="430" y="206" class="b">REGS8</text>
+  <text x="430" y="224" class="s">99:96</text>
+  <rect x="480" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="486" y="206" class="b">REGS7</text>
+  <text x="486" y="224" class="s">95:92</text>
+  <rect x="536" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="542" y="206" class="b">REGS6</text>
+  <text x="542" y="224" class="s">91:88</text>
+  <rect x="592" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="598" y="206" class="b">REGS5</text>
+  <text x="598" y="224" class="s">87:84</text>
+  <rect x="648" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="654" y="206" class="b">REGS4</text>
+  <text x="654" y="224" class="s">83:80</text>
+  <rect x="704" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="710" y="206" class="b">REGS3</text>
+  <text x="710" y="224" class="s">79:76</text>
+  <rect x="760" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="766" y="206" class="b">REGS2</text>
+  <text x="766" y="224" class="s">75:72</text>
+  <rect x="816" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="822" y="206" class="b">REGS1</text>
+  <text x="822" y="224" class="s">71:68</text>
+  <rect x="872" y="186" width="56" height="48" class="blk" stroke="#7a4bb3" fill="#f1eafb"/>
+  <text x="878" y="206" class="b">REGS0</text>
+  <text x="878" y="224" class="s">67:64</text>
+
+  <!-- example packet -->
+  <text x="32" y="276" class="h">示例：一个 PACKED 图元（NLOOP = 2，NREG = 3）</text>
+  <rect x="32" y="292" width="380" height="30" class="blk" stroke="#2f6fb2" fill="#eaf2fc"/>
+  <text x="42" y="312" class="b">GIFtag</text>
+  <text x="96" y="312" class="s">NLOOP=2  EOP=1  FLG=0  NREG=3  REGS=0x512</text>
+  <rect x="32" y="322" width="380" height="30" class="blk" stroke="#c07a1a" fill="#fdf0dc"/>
+  <text x="42" y="342" class="b">ST</text>
+  <text x="96" y="342" class="s">S、T、Q（Q 暂存，供 RGBAQ 使用）</text>
+  <rect x="32" y="352" width="380" height="30" class="blk" stroke="#c07a1a" fill="#fdf0dc"/>
+  <text x="42" y="372" class="b">RGBAQ</text>
+  <text x="96" y="372" class="s">R、G、B、A 各占一个字的低 8 位</text>
+  <rect x="32" y="382" width="380" height="30" class="blk" stroke="#c07a1a" fill="#fdf0dc"/>
+  <text x="42" y="402" class="b">XYZ2</text>
+  <text x="96" y="402" class="s">X、Y、Z，写入后 GS 加入一个顶点</text>
+  <rect x="32" y="412" width="380" height="30" class="blk" stroke="#c07a1a" fill="#fdf0dc"/>
+  <text x="42" y="432" class="b">ST</text>
+  <text x="96" y="432" class="s">第 2 个顶点</text>
+  <rect x="32" y="442" width="380" height="30" class="blk" stroke="#c07a1a" fill="#fdf0dc"/>
+  <text x="42" y="462" class="b">RGBAQ</text>
+  <text x="96" y="462" class="s">第 2 个顶点</text>
+  <rect x="32" y="472" width="380" height="30" class="blk" stroke="#c07a1a" fill="#fdf0dc"/>
+  <text x="42" y="492" class="b">XYZ2</text>
+  <text x="96" y="492" class="s">第 2 个顶点</text>
+  <rect x="32" y="502" width="380" height="30" class="ext"/>
+  <text x="42" y="522" class="s">下一个数据包的 GIFtag</text>
+
+  <path d="M414 323 H426 V381 H414" class="ln"/>
+  <text x="434" y="356" class="b">循环 1</text>
+  <path d="M414 413 H426 V471 H414" class="ln"/>
+  <text x="434" y="446" class="b">循环 2</text>
+
+  <rect x="520" y="292" width="408" height="240" rx="10" class="ee"/>
+  <text x="536" y="316" class="h">说明</text>
+  <text x="536" y="342" class="n">GIFtag 低 64 位 = 0x3000000000008002</text>
+  <text x="536" y="362" class="n">GIFtag 高 64 位 = 0x0000000000000512</text>
+  <text x="536" y="388" class="n">REGS0 = 0x2（ST），REGS1 = 0x1（RGBAQ），</text>
+  <text x="536" y="408" class="n">REGS2 = 0x5（XYZ2），其余描述符不使用</text>
+  <text x="536" y="434" class="n">数据长度 = NLOOP × NREG = 6 个四字</text>
+  <text x="536" y="460" class="n">每个四字按描述符的 PACKED 格式拆开，</text>
+  <text x="536" y="480" class="n">写入对应的 GS 一般寄存器（8.4 节）</text>
+  <text x="536" y="506" class="n">EOP = 1：本图元是数据包的最后一个</text>
+</svg>

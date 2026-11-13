@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="560" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 13-1 CDVD 子系统</text>
+  <text x="24" y="58" class="s">S 命令由 MechaCon 同步执行；N 命令交给 DSP / 光驱机构异步执行。虚线框与虚线箭头表示 QEMU 未模拟的部分。</text>
+
+  <!-- IOP -->
+  <rect x="24" y="90" width="240" height="400" rx="14" class="iop"/>
+  <text x="40" y="114" class="h">IOP（R3000A）</text>
+  <rect x="40" y="130" width="208" height="56" rx="6" class="blk" stroke="#2e8b57"/>
+  <text x="52" y="153" class="n">cdvdman 驱动</text>
+  <text x="52" y="173" class="s">IOP 内核模块，发出 N / S 命令</text>
+  <rect x="40" y="253" width="208" height="56" rx="6" class="blk" stroke="#2e8b57"/>
+  <text x="52" y="276" class="n">IOP INTC</text>
+  <text x="52" y="296" class="s">中断源 2（CDVD）</text>
+  <rect x="40" y="400" width="208" height="56" rx="6" class="blk" stroke="#2e8b57"/>
+  <text x="52" y="423" class="n">IOP DMA 通道 3</text>
+  <text x="52" y="443" class="s">扇区数据 → IOP 内存</text>
+  <path d="M144 251 V190" class="ln" marker-end="url(#a)"/>
+  <text x="152" y="226" class="s">中断处理程序</text>
+
+  <!-- CDVD registers -->
+  <rect x="330" y="90" width="270" height="372" rx="14" class="iop"/>
+  <text x="346" y="114" class="h">CDVD 寄存器 0x1F402000</text>
+  <rect x="346" y="128" width="238" height="118" rx="6" class="blk" stroke="#2e8b57"/>
+  <text x="358" y="148" class="b">S 命令接口（同步）</text>
+  <text x="358" y="172" class="n">0x16  S_COMMAND</text>
+  <text x="358" y="196" class="n">0x17  S_PARAM / S_STATUS</text>
+  <text x="358" y="220" class="n">0x18  S_RESULT</text>
+  <rect x="346" y="258" width="238" height="46" rx="6" class="blk" stroke="#2e8b57"/>
+  <text x="358" y="286" class="n">0x08  CDVD_I_STAT</text>
+  <rect x="346" y="316" width="238" height="130" rx="6" class="blk" stroke="#2e8b57"/>
+  <text x="358" y="336" class="b">N 命令接口（异步）</text>
+  <text x="358" y="360" class="n">0x04  N_COMMAND</text>
+  <text x="358" y="384" class="n">0x05  N_PARAM / N_READY</text>
+  <text x="358" y="408" class="n">0x06  ERROR / HOWTO</text>
+  <text x="358" y="432" class="n">0x07  BREAK</text>
+
+  <!-- IOP <-> registers -->
+  <path d="M250 158 H328" class="ln" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="270" y="150" class="s">8 位读写</text>
+  <path d="M344 281 H250" class="ln" marker-end="url(#a)"/>
+  <text x="270" y="273" class="s">IRQ</text>
+
+  <!-- MechaCon -->
+  <rect x="670" y="90" width="266" height="240" rx="14" class="mem"/>
+  <text x="686" y="114" class="h">MechaCon（机芯控制器）</text>
+  <rect x="686" y="126" width="234" height="30" rx="5" class="blk" stroke="#c07a1a"/>
+  <text x="696" y="146" class="n">RTC 实时时钟</text>
+  <text x="834" y="146" class="s">S 0x08/0x09</text>
+  <rect x="686" y="162" width="234" height="30" rx="5" class="blk" stroke="#c07a1a"/>
+  <text x="696" y="182" class="n">NVM 1 KB EEPROM</text>
+  <text x="834" y="182" class="s">S 0x0A/0x0B</text>
+  <rect x="686" y="198" width="234" height="30" rx="5" class="blk" stroke="#c07a1a"/>
+  <text x="696" y="218" class="n">型号 / i.LINK ID</text>
+  <text x="834" y="218" class="s">S 0x12/0x17</text>
+  <rect x="686" y="234" width="234" height="30" rx="5" class="blk" stroke="#c07a1a"/>
+  <text x="696" y="254" class="n">版本 / 温度</text>
+  <text x="834" y="254" class="s">S 0x03 子命令</text>
+  <rect x="686" y="270" width="234" height="30" rx="5" class="ext"/>
+  <text x="696" y="290" class="n">MagicGate 认证</text>
+  <text x="834" y="290" class="s">S 0x80–0x97</text>
+
+  <!-- DSP / drive -->
+  <rect x="670" y="350" width="266" height="120" rx="14" class="ext"/>
+  <text x="686" y="374" class="h">DSP / 光驱机构</text>
+  <text x="686" y="394" class="s">寻道、读扇区、读 TOC</text>
+  <rect x="686" y="412" width="234" height="44" rx="6" class="ext"/>
+  <text x="698" y="439" class="n">光盘（QEMU 中没有光盘）</text>
+
+  <!-- register groups -> controllers -->
+  <path d="M586 187 H668" class="ln" marker-end="url(#a)"/>
+  <text x="606" y="179" class="s">S 命令</text>
+  <path d="M586 380 H668" class="ln" marker-end="url(#a)"/>
+  <text x="606" y="372" class="s">N 命令</text>
+  <path d="M803 332 V348" class="ln" marker-end="url(#a)"/>
+  <text x="812" y="344" class="s">控制</text>
+
+  <!-- sector data path -->
+  <path d="M803 472 V525 H144 V458" class="ln" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="330" y="546" class="s">扇区数据经 IOP DMA 通道 3 送入 IOP 内存（QEMU 未模拟：通道 3 没有外设）</text>
+</svg>

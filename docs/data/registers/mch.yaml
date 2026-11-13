@@ -1,0 +1,77 @@
+# MCH（存储器控制器）RDRAM 初始化接口寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# offset 相对于 base 0x1000F430，与 QEMU hw/misc/ps2_mch.c 中的 REG32() 一致。
+# 位域名称来自 PCSX2 的注释与 Rambus RDRAM 串行控制协议的通行术语；真实硬件的完整定义未见公开资料。
+block: mch
+title: MCH RDRAM 初始化接口
+page: /chapters/14-peripherals
+base: 0x1000F430
+size: 0x20
+bus: EE 总线
+access_size: 32 位（64 位访问拆成两次 32 位访问；更窄的访问被拒绝：CPU 访问产生总线错误（DBE），qtest 读出 0）
+width: 32
+status: verified
+qemu:
+  files: [hw/misc/ps2_mch.c, hw/mips/ps2_ee.c]
+registers:
+  - name: MCH_RICM
+    addr: 0x1000F430
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    brief: RDRAM 串行控制命令：操作码、寄存器地址、器件号
+    desc: >-
+      RAC（Rambus ASIC Cell）初始化命令寄存器。BIOS 启动早期经它向主存的 RDRAM 器件发出串行控制命令：
+      SOP 给出操作（0 为串行读 SRD，1 为 INIT），SA 给出 RDRAM 控制寄存器地址，SDEV 给出器件号。
+      写入后命令立即完成，QEMU 在保存时把 BUSY 清零；读 MCH_RICM 恒为 0。读命令（SOP = 0）的结果
+      由随后读 MCH_DRD 得到，见 14.7 节的命令表。
+      写入 SA = 0x21、SOP = 1（INIT）且 MCH_DRD.SRP 为 0 时，已应答的器件计数清零。
+    fields:
+      - { bits: "4:0", name: SDEV, reset: 0, desc: "串行器件号；SA = 0x40（DEVID）的读命令把它原样返回" }
+      - { bits: "5", name: SBC, reset: 0, status: unimplemented, desc: "名称见 PCSX2 注释（串行广播），QEMU 只保存" }
+      - name: SOP
+        bits: "9:6"
+        reset: 0
+        desc: 串行操作码。QEMU 只区分 0 与 1，其他值只保存，MCH_DRD 读出 0
+        values: { "0": "SRD，串行读 RDRAM 控制寄存器", "1": "INIT（与 SA = 0x21 一起使用）" }
+      - { bits: "10", name: SDEV5, reset: 0, status: unimplemented, desc: "PCSX2 注释称器件号的又一位，含义不确定；QEMU 只保存" }
+      - { bits: "15:11", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - name: SA
+        bits: "27:16"
+        reset: 0
+        desc: RDRAM 控制寄存器地址
+        values: { "0x021": "INIT", "0x023": "CNFGA", "0x024": "CNFGB", "0x040": "DEVID" }
+      - { bits: "30:28", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "31", name: BUSY, reset: 0, desc: "命令忙。BIOS 写入时置 1；QEMU 中命令立即完成，保存时清零" }
+    ops:
+      - "读 RDRAM 控制寄存器：写 MCH_RICM = (SA << 16) | (0 << 6) | SDEV（可同时置 BUSY），然后读 MCH_DRD。"
+      - "统计器件数：写 MCH_DRD 使 SRP = 0，写 MCH_RICM = (0x21 << 16) | (1 << 6)；再写 SA = 0x21、SOP = 0 的读命令，反复读 MCH_DRD，读出 0x1F 的次数即器件数。"
+    notes:
+      - ps2tek 的杂项寄存器表把 0x1000F430 记为 MCH_DRD、0x1000F440 记为 MCH_RICM，与其正文给出的模拟逻辑及 PCSX2 相反；本书依 PCSX2 与 QEMU。
+      - 读 MCH_RICM 恒为 0 与 PCSX2、ps2tek 相同。
+    source:
+      - "PCSX2 pcsx2/Hw.h:326-327"
+      - "PCSX2 pcsx2/HwWrite.cpp:233-236"
+      - "PCSX2 pcsx2/HwRead.cpp:145-147"
+      - "ps2tek §EE RDRAM initialization"
+      - "QEMU hw/misc/ps2_mch.c（ps2_mch_ricm_pre_write、ps2_mch_ricm_post_read）"
+
+  - name: MCH_DRD
+    addr: 0x1000F440
+    offset: 0x10
+    access: R/W
+    reset: 0x00000000
+    brief: RDRAM 串行读数据；写入时第 7 位为 SRP（SIO 中继）
+    desc: >-
+      读出时返回 MCH_RICM 中读命令的结果（见 14.7 节的命令表）：SA = 0x21 时，前两次读出 0x1F（两个 RDRAM 器件各应答一次），
+      以后读出 0；SA = 0x23 读出 0x0D0D；SA = 0x24 读出 0x0090；SA = 0x40 读出 MCH_RICM.SDEV；其他 SA 或 SOP 不为 0 时读出 0。
+      写入值被保存，其中第 7 位 SRP（SIO repeater）为 1 时，INIT 命令不清除器件计数。读出不返回写入值。
+    notes:
+      - 系统复位清除 MCH_RICM、MCH_DRD 与器件计数。
+      - 应答的器件数（2）、CNFGA、CNFGB 的取值与 PCSX2、ps2tek 一致；它们对应真实机器上的 RDRAM 配置，QEMU 没有按配置变化。
+    source:
+      - "PCSX2 pcsx2/Hw.h:327"
+      - "PCSX2 pcsx2/HwRead.cpp:157-185"
+      - "PCSX2 pcsx2/HwWrite.cpp:233-241"
+      - "ps2tek §EE RDRAM initialization"
+      - "QEMU hw/misc/ps2_mch.c（ps2_mch_drd_post_read）"

@@ -1,0 +1,104 @@
+# IOP 中断控制器（INTC）寄存器。格式说明见 docs/data/SCHEMA.md。
+# 地址为 IOP 物理地址；EE 经 SBUS 窗口访问时为 0x1F801070（KSEG1 0xBF801070）。
+block: iop-intc
+title: IOP 中断控制器
+page: /chapters/12-iop
+base: 0x1F801070
+size: 0x10
+bus: IOP 总线
+access_size: 8、16 或 32 位；窄访问只读写所涉及的字节
+width: 32
+status: verified
+qemu:
+  files: [include/hw/intc/ps2_iop_intc.h, hw/intc/ps2_iop_intc.c, hw/mips/ps2_iop.c, hw/mips/ps2.c]
+registers:
+  - name: I_STAT
+    addr: 0x1F801070
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    brief: 中断状态，每个中断源一位，写 0 清零
+    desc: >-
+      每个中断源占一位。中断源信号出现上升沿时，对应位置 1 并保持。与 EE INTC 相反，IOP 的 I_STAT
+      是“写 0 清零”：写入值中为 0 的位被清除，为 1 的位不变。置位不受 I_MASK 影响。
+      下表的位名按 ps2sdk intrman 的中断号命名；只有 QEMU 接上了中断源的位标为已验证。
+    fields:
+      - { bits: "0", name: VBLANK, reset: 0, desc: 场消隐开始，来自 GS，与 EE INTC 第 2 位同时产生 }
+      - { bits: "1", name: SBUS, reset: 0, status: unimplemented, desc: "SBUS 中断（EE → IOP）。EE 写 SIF CTRL 第 18 位时产生（PCSX2）；PS1 模式下为 GPU 中断。QEMU 未接此中断源" }
+      - { bits: "2", name: CDVD, reset: 0, desc: CDVD 光驱（N 命令、S 命令完成及托盘事件） }
+      - { bits: "3", name: DMA, reset: 0, desc: IOP DMA。DICR 第 31 位为 1 时有效，第一组和第二组通道共用此位 }
+      - { bits: "4", name: RTC0, reset: 0, desc: 根计数器 0 }
+      - { bits: "5", name: RTC1, reset: 0, desc: 根计数器 1 }
+      - { bits: "6", name: RTC2, reset: 0, desc: 根计数器 2 }
+      - { bits: "7", name: SIO0, reset: 0, status: unimplemented, desc: PS1 方式的手柄/存储卡串口 SIO0。QEMU 未实现 SIO0（0x1F801040 为未实现窗口） }
+      - { bits: "8", name: SIO1, reset: 0, status: unimplemented, desc: 串口 SIO1。QEMU 未实现 }
+      - { bits: "9", name: SPU2, reset: 0, desc: SPU2（IRQA 地址命中等） }
+      - { bits: "10", name: PIO, reset: 0, status: unimplemented, desc: 并行口 PIO。QEMU 未实现 }
+      - { bits: "11", name: EVBLANK, reset: 0, desc: 场消隐结束，与 EE INTC 第 3 位同时产生 }
+      - { bits: "12", name: DVD, reset: 0, status: unimplemented, desc: 用途不明（ps2sdk、ps2tek 均未说明）。QEMU 未接 }
+      - { bits: "13", name: DEV9, reset: 0, desc: "DEV9 扩展接口（PCMCIA / SPEED）。QEMU 中为 SPEED INTR_STAT & INTR_MASK" }
+      - { bits: "14", name: RTC3, reset: 0, desc: 根计数器 3 }
+      - { bits: "15", name: RTC4, reset: 0, desc: 根计数器 4 }
+      - { bits: "16", name: RTC5, reset: 0, desc: 根计数器 5 }
+      - { bits: "17", name: SIO2, reset: 0, desc: SIO2（手柄与存储卡接口）传输结束 }
+      - { bits: "21:18", name: HTR0–HTR3, reset: 0, status: unimplemented, desc: 用途不明。QEMU 未接 }
+      - { bits: "22", name: USB, reset: 0, desc: USB OHCI 主控制器 }
+      - { bits: "23", name: EXTR, reset: 0, status: unimplemented, desc: 主板扩展接口，零售机上一般不用。QEMU 未接 }
+      - { bits: "24", name: ILINK, reset: 0, status: unimplemented, desc: "i.LINK（IEEE 1394，ps2tek 称 FWRE）。QEMU 未实现 i.LINK" }
+      - { bits: "25", name: FDMA, reset: 0, status: unimplemented, desc: i.LINK DMA。QEMU 未接 }
+      - { bits: "31:26", name: 保留, access: RO, reset: 0, desc: QEMU 中读出为 0 }
+    ops:
+      - 读 I_STAT 与 I_MASK 相与，得到待处理且已允许的中断源。
+      - 清除第 n 位：写 ~(1 << n)，例如清除 DMA（第 3 位）写 0xFFFFFFF7。不要写 0，否则会清掉所有待处理的中断源。
+      - 若中断源本身有状态标志（DICR、计数器 MODE、SIO2 ISTAT 等），先清中断源的标志，再清 I_STAT 对应位。
+    notes:
+      - QEMU 按上升沿锁存：信号保持为高时只置位一次，必须让信号先变低（清除中断源标志）才会再次置位。PCSX2 对 USB 在电平保持期间反复置位。
+      - 字节或半字写入只作用于所写的字节，其他字节不变（ps2/iop-intc 测试检查）。
+    source:
+      - "QEMU hw/intc/ps2_iop_intc.c（ps2_iop_intc_set_irq、ps2_iop_intc_write）"
+      - "QEMU include/hw/intc/ps2_iop_intc.h（PS2_IOP_INTC_VBLANK_START…PS2_IOP_INTC_USB）"
+      - "QEMU hw/mips/ps2.c、hw/mips/ps2_iop.c（中断源连线）"
+      - "ps2sdk iop/system/intrman/include/intrman.h:26-56"
+      - "PCSX2 pcsx2/IopIrq.cpp:48-52"
+      - "PCSX2 pcsx2/HwWrite.cpp:170-175（SIF CTRL 第 18 位 → IOP 第 1 位）"
+      - "ps2tek §IOP Interrupts"
+
+  - name: I_MASK
+    addr: 0x1F801074
+    offset: 0x04
+    access: R/W
+    reset: 0x00000000
+    brief: 中断屏蔽，为 1 的位允许对应中断源
+    desc: >-
+      位定义与 I_STAT 相同。某位为 1 时，I_STAT 中对应位为 1 即可使 INTC 输出中断请求（还需 I_CTRL.0 = 1）。
+    fields:
+      - { bits: "25:0", name: MASK, reset: 0, desc: 第 n 位对应 I_STAT 第 n 位 }
+      - { bits: "31:26", name: 保留, access: RO, reset: 0, desc: QEMU 中写入无效，读出为 0 }
+    notes:
+      - 修改 I_MASK 时应按“读—改—写”方式只改动所需的位。
+    source: ["QEMU hw/intc/ps2_iop_intc.c", "PCSX2 pcsx2/IopHw.h:39", "ps2tek §IOP Interrupts"]
+
+  - name: I_CTRL
+    addr: 0x1F801078
+    offset: 0x08
+    access: R/W
+    reset: 0x00000000
+    brief: 中断总允许；读出时自动清零
+    desc: >-
+      第 0 位为 IOP INTC 的总允许位。INTC 向 R3000A 的 IP2 输出的中断请求为
+      I_CTRL.0 && (I_STAT & I_MASK) ≠ 0。读 I_CTRL 返回当前值并同时将其清零，因此一次读操作既能保存
+      原状态又能关闭中断；之后写回读出值即可恢复。
+    fields:
+      - name: ENABLE
+        bits: "0"
+        access: R/C
+        reset: 0
+        desc: 中断总允许
+        values: { "0": "INTC 不输出中断请求", "1": "允许输出中断请求" }
+      - { bits: "31:1", name: 保留, access: RO, reset: 0, desc: QEMU 中写入无效，读出为 0 }
+    ops:
+      - 进入临界区：old = I_CTRL（读出即关闭）；退出临界区：I_CTRL = old。
+    notes:
+      - 任何宽度的读操作都会把整个 I_CTRL 清零（ps2/iop-intc 测试先读 32 位得 1，再读 16 位得 0）。
+      - ps2tek 将其列为 1 字节寄存器；QEMU 接受 8/16/32 位访问。
+    source: ["QEMU hw/intc/ps2_iop_intc.c（ps2_iop_intc_read）", "PCSX2 pcsx2/ps2/Iop/IopHwRead.cpp:301-309", "ps2tek §IOP Interrupts"]

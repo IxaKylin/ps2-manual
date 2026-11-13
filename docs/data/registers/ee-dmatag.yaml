@@ -1,0 +1,74 @@
+# EE DMAC 的 DMAtag（链模式下的传输描述符）。DMAtag 位于存储器中或由外设送来，
+# 没有总线地址。格式说明见 docs/data/SCHEMA.md。
+block: ee-dmatag
+title: EE DMAC DMAtag
+page: /chapters/06-dmac
+bus: 存储器中的数据结构
+width: 128
+status: verified
+qemu:
+  files: [hw/dma/ps2_dmac.c, include/hw/dma/ps2_dmac.h]
+registers:
+  - name: DMAtag
+    width: 128
+    brief: 源链 DMAtag（存储器 → 外设）
+    desc: >-
+      源链模式下 DMAC 从 Dn_TADR 读入的四字。低 64 位为标签本身：QWC 给出数据块长度，
+      ID 决定数据块的位置和下一个 DMAtag 的地址，ADDR 给出数据块地址或下一个 DMAtag 的地址。
+      高 64 位不被 DMAC 解释，CHCR.TTE = 1 时随数据送往外设（VIF 通道在此放 VIFcode）。
+      DMAtag 须按四字对齐。
+    fields:
+      - { bits: "15:0", name: QWC, desc: 数据块的四字数，可为 0 }
+      - { bits: "25:16", name: 保留, desc: 写 0 }
+      - name: PCE
+        bits: "27:26"
+        status: unimplemented
+        desc: 优先级控制。处理此标签时可开关 D_PCR.PCE（D_PCR 第 31 位）
+        values: { "0": "不变", "1": "保留", "2": "将 D_PCR.PCE 清零（关闭优先级控制）", "3": "将 D_PCR.PCE 置 1（开启优先级控制）" }
+      - name: ID
+        bits: "30:28"
+        desc: 标签 ID，见本章 DMAtag ID 表
+        values:
+          "0": "refe：传送 ADDR 处的 QWC 个四字，然后结束"
+          "1": "cnt：传送紧跟标签的 QWC 个四字，下一标签紧跟数据之后"
+          "2": "next：传送紧跟标签的 QWC 个四字，下一标签位于 ADDR"
+          "3": "ref：传送 ADDR 处的 QWC 个四字，下一标签紧跟本标签"
+          "4": "refs：同 ref，并受停顿控制"
+          "5": "call：传送紧跟标签的数据，数据之后的地址压入 ASR，下一标签位于 ADDR"
+          "6": "ret：传送紧跟标签的数据，下一标签地址从 ASR 弹出；栈空时结束"
+          "7": "end：传送紧跟标签的 QWC 个四字，然后结束"
+      - { bits: "31", name: IRQ, status: reference, desc: 为 1 且 CHCR.TIE = 1 时，本标签的数据传送完后通道结束。源链中 QEMU 已实现，但没有测试覆盖 }
+      - { bits: "62:32", name: ADDR, desc: 数据块或下一标签的地址，第 35:32 位应为 0（四字对齐） }
+      - { bits: "63", name: SPR, desc: 为 1 时 ADDR 指向暂存存储器 SPR }
+      - { bits: "127:64", name: DATA, desc: 不被 DMAC 解释；CHCR.TTE = 1 时随数据送往外设 }
+    notes:
+      - QEMU 每次传输最多处理 65536 个 DMAtag，超过时视为死循环，置 D_STAT.BEIS 并停止。
+      - QEMU 中 call 在 ASP 已为 2 时置 BEIS 并停止；refs 按 ref 处理，不检查 D_STADR。
+      - QEMU 在 TTE = 1 时把高 64 位送给任何挂接了外设的通道，GIF 通道通常应使 TTE = 0。
+      - 测试依据：refe、cnt、ret（ASP = 0）、end 四种 ID，SPR 位与 TTE 传送 DATA 由 qtest ps2/vif0、ps2/sif-dma、ps2/dmac/spr 覆盖；next、ref、refs、call 四种 ID 与 65536 标签上限 QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Dmac.h:19（tag_id）", "PCSX2 pcsx2/Dmac.h:72（tDMA_TAG）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c（ps2_dmac_run_chain）"]
+
+  - name: DMAtag_DST
+    width: 128
+    brief: 目的链 DMAtag（外设 → 存储器）
+    desc: >-
+      目的链模式下由外设随数据送来的四字（SIF0 由 IOP 一侧在每个数据块前插入）。
+      DMAC 在 Dn_QWC 为 0 时把收到的四字当作标签：ADDR 装入 Dn_MADR，QWC 装入 Dn_QWC，
+      随后的 QWC 个四字写入 ADDR 处。ID 只有 cnts、cnt、end 三种有意义。
+    fields:
+      - { bits: "15:0", name: QWC, desc: 随后数据块的四字数 }
+      - { bits: "27:16", name: 保留, desc: 写 0 }
+      - name: ID
+        bits: "30:28"
+        desc: 标签 ID
+        values:
+          "0": "cnts：接收 QWC 个四字写入 ADDR；若本通道为 D_CTRL.STS 源通道，更新 D_STADR"
+          "1": "cnt：接收 QWC 个四字写入 ADDR，继续等待下一标签"
+          "7": "end：接收 QWC 个四字写入 ADDR，然后结束"
+      - { bits: "31", name: IRQ, desc: 为 1 且 CHCR.TIE = 1 时，本数据块写完后通道结束 }
+      - { bits: "62:32", name: ADDR, desc: 数据块的目的地址 }
+      - { bits: "63", name: SPR, desc: 为 1 时目的地址位于 SPR }
+      - { bits: "127:64", name: DATA, desc: DMAC 不使用 }
+    notes:
+      - 测试依据：end 标签（含 SPR 地址与回绕）由 qtest ps2/sif-dma、ps2/dmac/spr 覆盖，IRQ 位结束接收由 ps2/lite-bios/sif 覆盖；cnts 更新 D_STADR 的行为 QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Dmac.h:19（tag_id）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c（ps2_dmac_receive）"]

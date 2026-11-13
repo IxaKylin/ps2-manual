@@ -1,0 +1,79 @@
+# 存储器映射示意图数据，由 scripts/gen-memmap.mjs 绘制成 docs/public/img/memmap-*.svg。
+# kind: ram / rom / io / gfx / iop / alias / unimp / gap
+- id: ee-physical
+  title: 图 2-1 EE 物理地址空间
+  legend:
+    - { kind: ram, text: RAM }
+    - { kind: io, text: EE 寄存器 }
+    - { kind: gfx, text: 图形 }
+    - { kind: alias, text: SBUS 窗口（访问 IOP 总线） }
+    - { kind: rom, text: ROM }
+  regions:
+    - { start: 0x00000000, size: 0x02000000, kind: ram, name: "主存 RDRAM 32 MB", note: "0x02000000 以上至 0x0FFFFFFF 无设备" }
+    - { start: 0x02000000, size: 0x0E000000, kind: gap, name: "" }
+    - { start: 0x10000000, size: 0x00010000, kind: io, name: "EE 寄存器", note: "定时器、IPU、GIF、VIF、DMAC、INTC、SIO、SIF、MCH" }
+    - { start: 0x10010000, size: 0x00FF0000, kind: gap, name: "" }
+    - { start: 0x11000000, size: 0x00010000, kind: gfx, name: "VU0 / VU1 存储器", note: "VU0 微程序/数据存储器、VU1 微程序/数据存储器" }
+    - { start: 0x11010000, size: 0x00FF0000, kind: gap, name: "" }
+    - { start: 0x12000000, size: 0x02000000, kind: gfx, name: "GS 特权寄存器", note: "PMODE…BGCOLOR、CSR、IMR、BUSDIR、SIGLBLID" }
+    - { start: 0x14000000, size: 0x00010000, kind: alias, name: "SBUS：DEV9 SPEED", note: "映射到 IOP 0x10000000" }
+    - { start: 0x14010000, size: 0x05FF0000, kind: gap, name: "" }
+    - { start: 0x1A000000, size: 0x00010000, kind: io, name: "DVE 视频编码器", note: "16 位访问" }
+    - { start: 0x1A010000, size: 0x01FF0000, kind: gap, name: "" }
+    - { start: 0x1C000000, size: 0x00800000, kind: alias, name: "SBUS：IOP 内存", note: "2 MB，镜像至 8 MB" }
+    - { start: 0x1C800000, size: 0x01800000, kind: gap, name: "" }
+    - { start: 0x1E000000, size: 0x00400000, kind: rom, name: "ROM1（DVD 播放器）" }
+    - { start: 0x1E400000, size: 0x00400000, kind: rom, name: "ROM2（中文字库，部分型号）" }
+    - { start: 0x1E800000, size: 0x00800000, kind: gap, name: "" }
+    - { start: 0x1F000000, size: 0x00A00000, kind: alias, name: "SBUS：IOP 寄存器", note: "映射到 IOP 0x1F000000–0x1F9FFFFF" }
+    - { start: 0x1FA00000, size: 0x00200000, kind: gap, name: "" }
+    - { start: 0x1FC00000, size: 0x00400000, kind: rom, name: "ROM0（BIOS）", note: "复位向量 0xBFC00000（KSEG1）" }
+
+- id: ee-registers
+  title: 图 2-2 EE 寄存器区（0x10000000–0x1000FFFF）
+  legend:
+    - { kind: io, text: 已建模 }
+    - { kind: gfx, text: 图形相关 }
+    - { kind: unimp, text: 未实现 }
+  regions:
+    - { start: 0x10000000, size: 0x2000, kind: io, name: "定时器 T0–T3", note: "每个定时器间隔 0x800" }
+    - { start: 0x10002000, size: 0x1000, kind: unimp, name: "IPU 寄存器", note: "未实现" }
+    - { start: 0x10003000, size: 0x0100, kind: gfx, name: "GIF 寄存器" }
+    - { start: 0x10003800, size: 0x0400, kind: gfx, name: "VIF0 寄存器" }
+    - { start: 0x10003C00, size: 0x0400, kind: gfx, name: "VIF1 寄存器" }
+    - { start: 0x10004000, size: 0x1000, kind: gfx, name: "VIF0 FIFO" }
+    - { start: 0x10005000, size: 0x1000, kind: gfx, name: "VIF1 FIFO" }
+    - { start: 0x10006000, size: 0x1000, kind: gfx, name: "GIF FIFO" }
+    - { start: 0x10007000, size: 0x1000, kind: unimp, name: "IPU FIFO", note: "未实现" }
+    - { start: 0x10008000, size: 0x6000, kind: io, name: "DMAC 通道 0–9", note: "VIF0、VIF1、GIF、IPU、SIF0–2、SPR" }
+    - { start: 0x1000E000, size: 0x1000, kind: io, name: "DMAC 全局寄存器", note: "D_CTRL、D_STAT、D_PCR、D_SQWC…" }
+    - { start: 0x1000F000, size: 0x0020, kind: io, name: "INTC", note: "I_STAT、I_MASK" }
+    - { start: 0x1000F100, size: 0x0100, kind: io, name: "SIO（调试串口）" }
+    - { start: 0x1000F200, size: 0x0100, kind: io, name: "SIF（EE 侧）" }
+    - { start: 0x1000F430, size: 0x0020, kind: io, name: "MCH（RDRAM 控制）" }
+    - { start: 0x1000F500, size: 0x0100, kind: io, name: "DMAC 使能", note: "D_ENABLER（+0x20）、D_ENABLEW（+0x90）" }
+
+- id: iop-physical
+  title: 图 2-3 IOP 物理地址空间
+  legend:
+    - { kind: ram, text: RAM }
+    - { kind: iop, text: IOP 寄存器 }
+    - { kind: io, text: 外设 }
+    - { kind: rom, text: ROM }
+    - { kind: unimp, text: 未实现 }
+  regions:
+    - { start: 0x00000000, size: 0x00200000, kind: ram, name: "IOP 内存 2 MB", note: "0x00200000–0x007FFFFF 为镜像" }
+    - { start: 0x00200000, size: 0x0FE00000, kind: gap, name: "" }
+    - { start: 0x10000000, size: 0x00010000, kind: io, name: "DEV9 SPEED / ATA", note: "EE 经 0x14000000 访问" }
+    - { start: 0x16000000, size: 0x00200000, kind: unimp, name: "DEV9 扩展窗口" }
+    - { start: 0x1D000000, size: 0x00000100, kind: io, name: "SIF（IOP 侧）" }
+    - { start: 0x1E000000, size: 0x00400000, kind: rom, name: "ROM1" }
+    - { start: 0x1E400000, size: 0x00400000, kind: rom, name: "ROM2" }
+    - { start: 0x1F402000, size: 0x00000100, kind: io, name: "CDVD / MechaCon" }
+    - { start: 0x1F800000, size: 0x00000400, kind: unimp, name: "IOP 暂存存储器" }
+    - { start: 0x1F801000, size: 0x00000800, kind: iop, name: "IOP 寄存器 1", note: "SSBUS、INTC、DMA 两组、根计数器 0–5、ICFG、DEV9、USB…" }
+    - { start: 0x1F808200, size: 0x00000100, kind: iop, name: "SIO2" }
+    - { start: 0x1F808400, size: 0x00000200, kind: unimp, name: "i.LINK" }
+    - { start: 0x1F900000, size: 0x00000800, kind: io, name: "SPU2", note: "两个核心，核心 1 在 +0x400" }
+    - { start: 0x1FC00000, size: 0x00400000, kind: rom, name: "ROM0（BIOS）", note: "与 EE 共用，复位向量 0xBFC00000" }
+    - { start: 0xFFFE0000, size: 0x00000200, kind: unimp, name: "缓存控制", note: "0xFFFE0130" }

@@ -1,0 +1,382 @@
+# GS 特权寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# 特权寄存器由 EE 经总线直接访问，均为 64 位，每个寄存器占 16 字节地址槽。
+# offset 相对于 base 0x12000000，与 QEMU 头文件中的 PS2_GS_xxx 常量一致。
+block: gs-priv
+title: GS 特权寄存器
+page: /chapters/09-gs
+base: 0x12000000
+size: 0x2000000
+bus: EE 总线
+access_size: 32 位或 64 位；32 位访问时地址第 2 位选择低 / 高 32 位
+width: 64
+status: verified
+qemu:
+  files: [include/hw/display/ps2_gs.h, hw/display/ps2_gs.c, hw/mips/ps2.c]
+registers:
+  - name: PMODE
+    addr: 0x12000000
+    offset: 0x0000
+    access: R/W
+    reset: "0x0000000000000000"
+    brief: PCRTC 模式：读出电路允许、两电路合成方式
+    desc: >-
+      PCRTC 的总控制寄存器。EN1、EN2 分别允许读出电路 1、2 从帧缓冲读出像素；其余位域控制两个电路的
+      合成方式：电路 1 的输出按 MMOD 选择的 α 值与电路 2（或背景色 BGCOLOR）混合，结果送往视频编码器。
+      QEMU 只使用 EN1、EN2，其余位域只保存。
+    fields:
+      - { bits: "0", name: EN1, reset: 0, desc: "读出电路 1 允许", values: { "0": "关闭", "1": "允许" } }
+      - { bits: "1", name: EN2, reset: 0, desc: "读出电路 2 允许", values: { "0": "关闭", "1": "允许" } }
+      - { bits: "4:2", name: CRTMD, reset: 0, status: unimplemented, desc: "CRT 输出模式。公开资料未给出取值含义；ps2sdk 的 GS_SET_PMODE 总是把该位域写为 1（ee/libgs/include/libgs.h:1146、common/include/gs_privileged.h:102）。QEMU 只保存" }
+      - name: MMOD
+        bits: "5"
+        reset: 0
+        status: unimplemented
+        desc: 电路 1 与电路 2 合成时使用的 α 值来源
+        values: { "0": "电路 1 像素的 α 值", "1": "固定值 ALP" }
+      - name: AMOD
+        bits: "6"
+        reset: 0
+        status: unimplemented
+        desc: 合成结果中保留哪一个电路的 α 值（用于回写，见 EXTBUF）
+        values: { "0": "电路 1", "1": "电路 2" }
+      - name: SLBG
+        bits: "7"
+        reset: 0
+        status: unimplemented
+        desc: 与电路 1 混合的对象
+        values: { "0": "电路 2 的输出", "1": "背景色 BGCOLOR" }
+      - { bits: "15:8", name: ALP, reset: 0, status: unimplemented, desc: "MMOD = 1 时使用的固定 α 值，0xFF 表示电路 1 完全覆盖" }
+    notes:
+      - QEMU 不做两个电路之间的 α 混合：两个电路都允许时，电路 2 先画，电路 1 画在其上，重叠部分只显示电路 1。
+      - MMOD、AMOD、SLBG 的含义依据 PCSX2 的合成实现归纳（参考级），CRTMD 的含义未见公开资料。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_circuit、ps2_gs_update_display）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:385（GSRegPMODE）"
+      - "PCSX2 pcsx2/GS/Renderers/OpenGL/GSDeviceOGL.cpp:2310（DoMerge）"
+      - "ps2tek §Memory Map（Privileged GS registers）"
+
+  - name: SMODE1
+    addr: 0x12000010
+    offset: 0x0010
+    access: R/W
+    reset: "0x0000000000000000"
+    brief: 视频同步模式 1（时钟、制式）
+    desc: >-
+      设定视频时钟分频与输出制式等，由 BIOS 的 SetGsCrt 系统调用按视频模式写入。QEMU 只使用 CMOD 位域，
+      据此确定场频；其他位域只保存。完整位域划分见 PCSX2 GSRegs.h，本手册不展开。
+    fields:
+      - name: CMOD
+        bits: "14:13"
+        reset: 0
+        status: reference
+        desc: 彩色副载波制式。QEMU 中 CMOD = 3 时场频为 50 Hz，其他取值均按 59.94 Hz。QEMU 已实现，但没有测试覆盖
+        values: { "0": "无副载波（VESA / 逐行 / HDTV）", "1": "含义不详", "2": "NTSC", "3": "PAL" }
+    notes:
+      - QEMU 在下一次场消隐时按新的 CMOD 计算下一场的时间，写入后不立即重新安排定时器。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_frame_ns）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:415（GSRegSMODE1）"
+      - "PCSX2 pcsx2/GS/GSState.cpp:837（GetVideoMode）"
+      - "ps2tek §BIOS（SetGsCrt）"
+
+  - name: SMODE2
+    addr: 0x12000020
+    offset: 0x0020
+    access: R/W
+    reset: "0x0000000000000000"
+    brief: 视频同步模式 2（隔行、场 / 帧模式）
+    desc: 选择隔行或逐行扫描，以及隔行时每场读出帧缓冲的方式。
+    fields:
+      - name: INT
+        bits: "0"
+        reset: 0
+        desc: 扫描方式
+        values: { "0": "逐行", "1": "隔行" }
+      - name: FFMD
+        bits: "1"
+        reset: 0
+        desc: 隔行时的读出方式。名称依据 ps2sdk（ee/libgs/include/libgs.h:40–43 的 GS_FFMD_FIELD = 0、GS_FFMD_FRAME = 1；ee/graph/include/graph.h:60–61）
+        values: { "0": "场模式（FIELD）：帧缓冲保存完整一帧，每场隔行读出其中一半的行", "1": "帧模式（FRAME）：每场读出全部行，帧缓冲只需半帧高" }
+      - name: DPMS
+        bits: "3:2"
+        reset: 0
+        status: unimplemented
+        desc: VESA DPMS 省电模式控制。PCSX2 只给出位域名称，取值含义未经核实
+    notes:
+      - QEMU 中 INT = 1 且 FFMD = 1（帧模式）时，输出的第 y 行取自帧缓冲第 y/2 行（每行重复两次），以得到正确的画面高度；其他组合按输出一行读帧缓冲一行处理。QEMU 源码注释（hw/display/ps2_gs.c 的 PS2GSCircuit.field）把这种情况称为“field mode”，与 ps2sdk 的命名相反。
+      - QEMU 不按 CSR.FIELD 交替显示奇偶场，也不检查 PCSX2 所做的“真正隔行”条件（SMODE1.CMOD 非 0 且 SYNCV.VFP 第 0 位为 1）。
+    source:
+      - "QEMU hw/display/ps2_gs.c（GS_SMODE2_INT、GS_SMODE2_FFMD、ps2_gs_circuit）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:456（GSRegSMODE2）"
+      - "PCSX2 pcsx2/GS/GSState.cpp:827（isReallyInterlaced）"
+
+  - name: SRFSH
+    addr: 0x12000030
+    offset: 0x0030
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: DRAM 刷新设置，QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_SRFSH）", "ps2tek §Memory Map"]
+
+  - name: SYNCH1
+    addr: 0x12000040
+    offset: 0x0040
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 水平同步时序 1，QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_SYNCH1）", "ps2tek §Memory Map"]
+
+  - name: SYNCH2
+    addr: 0x12000050
+    offset: 0x0050
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 水平同步时序 2，QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_SYNCH2）", "ps2tek §Memory Map"]
+
+  - name: SYNCV
+    addr: 0x12000060
+    offset: 0x0060
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 垂直同步时序（前后肩、同步宽度），QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_SYNCV）", "PCSX2 pcsx2/GS/GSRegs.h:479（GSRegSYNCV）"]
+
+  - name: DISPFB1
+    addr: 0x12000070
+    offset: 0x0070
+    access: R/W
+    reset: "0x0000000000000000"
+    brief: 读出电路 1 的帧缓冲设置
+    desc: >-
+      读出电路 1 所显示的帧缓冲：起始地址、缓冲宽度、像素格式，以及显示区域左上角在缓冲中的位置。
+      DISPFB2（`0x12000090`）对读出电路 2 作同样设定，格式相同。
+    fields:
+      - { bits: "8:0", name: FBP, reset: 0, desc: "帧缓冲起始地址，单位为页（2048 字 = 8 KB）" }
+      - { bits: "14:9", name: FBW, reset: 0, desc: "缓冲宽度，单位为 64 像素" }
+      - name: PSM
+        bits: "19:15"
+        reset: 0
+        desc: 帧缓冲像素格式（只用 5 位，取表 9-4 中的颜色格式编码）
+        values: { "0x00": "PSMCT32", "0x01": "PSMCT24", "0x02": "PSMCT16", "0x0A": "PSMCT16S" }
+      - { bits: "42:32", name: DBX, reset: 0, desc: "显示区域左上角在缓冲中的 X 坐标（像素）" }
+      - { bits: "53:43", name: DBY, reset: 0, desc: "显示区域左上角在缓冲中的 Y 坐标（像素）" }
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_circuit）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:321（GSRegDISPFB）"
+
+  - name: DISPLAY1
+    addr: 0x12000080
+    offset: 0x0080
+    access: R/W
+    reset: "0x0000000000000000"
+    brief: 读出电路 1 的显示位置与大小
+    desc: >-
+      读出电路 1 在显示画面中的位置、大小与放大倍数。DX、DW 以视频时钟（VCK）为单位，MAGH 为水平方向
+      每个像素占用的 VCK 数减 1；DY、DH 以扫描线为单位。DISPLAY2（`0x120000A0`）对读出电路 2 作同样设定。
+    fields:
+      - { bits: "11:0", name: DX, reset: 0, desc: "显示区域左上角的水平位置（VCK 单位）" }
+      - { bits: "22:12", name: DY, reset: 0, desc: "显示区域左上角的垂直位置（扫描线）" }
+      - { bits: "26:23", name: MAGH, reset: 0, desc: "水平放大倍数减 1（1–16 倍）" }
+      - { bits: "28:27", name: MAGV, reset: 0, desc: "垂直放大倍数减 1（1–4 倍）" }
+      - { bits: "43:32", name: DW, reset: 0, desc: "显示区域宽度减 1（VCK 单位）" }
+      - { bits: "54:44", name: DH, reset: 0, desc: "显示区域高度减 1（扫描线）" }
+    notes:
+      - QEMU 把显示区域换算为帧缓冲像素：宽 = (DW + 1) / (MAGH + 1)，高 = (DH + 1) / (MAGV + 1)，位置同理；两个电路所覆盖区域的外接矩形即为 QEMU 控制台的分辨率（最大 2048 × 2048）。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_circuit、ps2_gs_update_display）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:333（GSRegDISPLAY）"
+
+  - name: DISPFB2
+    addr: 0x12000090
+    offset: 0x0090
+    access: R/W
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 读出电路 2 的帧缓冲设置，格式同 DISPFB1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_circuit）", "PCSX2 pcsx2/GS/GSRegs.h:321"]
+
+  - name: DISPLAY2
+    addr: 0x120000A0
+    offset: 0x00a0
+    access: R/W
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 读出电路 2 的显示位置与大小，格式同 DISPLAY1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_circuit）", "PCSX2 pcsx2/GS/GSRegs.h:333"]
+
+  - name: EXTBUF
+    addr: 0x120000B0
+    offset: 0x00b0
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 回写（feedback write）目标缓冲设置，QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_EXTBUF）", "PCSX2 pcsx2/GS/GSRegs.h:344（GSRegEXTBUF）"]
+
+  - name: EXTDATA
+    addr: 0x120000C0
+    offset: 0x00c0
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 回写源区域设置，QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_EXTDATA）", "PCSX2 pcsx2/GS/GSRegs.h:357（GSRegEXTDATA）"]
+
+  - name: EXTWRITE
+    addr: 0x120000D0
+    offset: 0x00d0
+    access: R/W
+    status: unimplemented
+    nodetail: true
+    reset: "0x0000000000000000"
+    brief: 回写启动 / 停止，QEMU 只保存
+    source: ["QEMU include/hw/display/ps2_gs.h（PS2_GS_EXTWRITE）", "PCSX2 pcsx2/GS/GSRegs.h:368（GSRegEXTWRITE）"]
+
+  - name: BGCOLOR
+    addr: 0x120000E0
+    offset: 0x00e0
+    access: R/W
+    status: unimplemented
+    reset: "0x0000000000000000"
+    brief: PCRTC 背景色
+    desc: >-
+      PCRTC 合成时使用的背景色：PMODE.SLBG = 1 时代替电路 2 与电路 1 混合，两个电路都未覆盖的区域也显示此颜色。
+      QEMU 只保存该寄存器，未覆盖区域显示黑色。
+    fields:
+      - { bits: "7:0", name: R, reset: 0, desc: 红色分量 }
+      - { bits: "15:8", name: G, reset: 0, desc: 绿色分量 }
+      - { bits: "23:16", name: B, reset: 0, desc: 蓝色分量 }
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_update_display）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:273（GSRegBGCOLOR）"
+      - "PCSX2 pcsx2/GS/Renderers/OpenGL/GSDeviceOGL.cpp:2319"
+
+  - name: CSR
+    addr: 0x12001000
+    offset: 0x1000
+    access: R/W
+    reset: "0x00000000551B4000"
+    brief: GS 控制 / 状态：事件标志、复位、场、FIFO 状态、版本
+    desc: >-
+      低 5 位是 GS 的事件标志：发生事件时由 GS 置 1，向对应位写 1 清零。任一事件标志为 1 且未被 IMR 屏蔽时，
+      GS 向 EE INTC 位 0 输出有效电平（第 4 章 4.5 节）。其余位反映场、FIFO 状态以及 GS 的版本号。
+      读写含义不同：写入时第 8、9 位为命令位，读出时为 0。
+    fields:
+      - { bits: "0", name: SIGNAL, access: R/W1C, reset: 0, desc: "SIGNAL 事件：GS 处理了一般寄存器 SIGNAL 的写入" }
+      - { bits: "1", name: FINISH, access: R/W1C, reset: 0, desc: "FINISH 事件：一般寄存器 FINISH 之前的绘图全部完成" }
+      - { bits: "2", name: HSINT, access: R/W1C, reset: 0, status: unimplemented, desc: "行同步事件，每条扫描线一次。QEMU 从不置位" }
+      - { bits: "3", name: VSINT, access: R/W1C, reset: 0, status: reference, desc: "场同步事件，每场一次，与 INTC VBON 同时产生。QEMU 已实现，但没有测试覆盖（qtest 只检查 INTC 的 VBON/VBOF）" }
+      - { bits: "4", name: EDWINT, access: R/W1C, reset: 0, status: unimplemented, desc: "回写（EXTWRITE）矩形区域结束事件。QEMU 从不置位" }
+      - { bits: "8", name: FLUSH, access: WO, reset: 0, status: unimplemented, desc: "写 1 清空 GS FIFO 并暂停绘图。QEMU 忽略" }
+      - { bits: "9", name: RESET, access: WO, reset: 0, desc: "写 1 使 GS 软复位。QEMU 中只清除全部事件标志" }
+      - { bits: "12", name: NFIELD, access: RO, reset: 0, status: unimplemented, desc: "场同步时采样的场信号，含义不详。QEMU 读出为 0" }
+      - name: FIELD
+        bits: "13"
+        access: RO
+        reset: 0
+        desc: 当前显示的场，QEMU 在每次场消隐开始时翻转
+        values: { "0": "偶数场", "1": "奇数场" }
+      - name: FIFO
+        bits: "15:14"
+        access: RO
+        reset: 1
+        desc: GS 输入 FIFO 状态。QEMU 同步处理全部数据，读出恒为 1
+        values: { "0": "非空非满", "1": "空", "2": "将满", "3": "保留" }
+      - { bits: "23:16", name: REV, access: RO, reset: 0x1B, desc: "GS 版本号，QEMU 读出 0x1B" }
+      - { bits: "31:24", name: ID, access: RO, reset: 0x55, desc: "GS 标识，QEMU 读出 0x55" }
+    ops:
+      - 清除事件：只向要清除的事件位写 1，例如写 0x00000008 清除 VSINT。
+      - 等待 FINISH：先写 0x00000002 清除旧的 FINISH，经 GIF 写一般寄存器 FINISH，然后循环读 CSR 直到第 1 位为 1（或打开 IMR.FINISHMSK 后用中断等待）。
+      - 判断奇偶场：在场消隐中断处理程序中读 CSR.FIELD。
+    notes:
+      - QEMU 中高 32 位读出为 0，对高 32 位（地址 0x12001004）的写入被忽略。
+      - 真实硬件与 PCSX2 中，CSR.SIGNAL 为 1 时再收到 SIGNAL 写入会使 GIF 停顿，直到程序写 CSR.SIGNAL 清除；QEMU 不停顿，只更新 SIGLBLID 并保持 SIGNAL 为 1。
+      - PCSX2 中 RESET 还会清零全部特权寄存器并把 IMR 恢复为全屏蔽；QEMU 的 RESET 不改变其他寄存器。
+    source:
+      - "QEMU include/hw/display/ps2_gs.h（PS2_GS_CSR_xxx）"
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_priv_read、ps2_gs_priv_write、ps2_gs_vblank）"
+      - "PCSX2 pcsx2/GS.h:31（tGS_CSR）"
+      - "PCSX2 pcsx2/GS.cpp:31（gsCSRwrite）"
+      - "PCSX2 pcsx2/Gif_Unit.cpp:50（SIGNAL 停顿）"
+
+  - name: IMR
+    addr: 0x12001010
+    offset: 0x1010
+    access: R/W
+    reset: "0x0000000000007F00"
+    status: reference
+    brief: GS 中断屏蔽，每个 CSR 事件一位
+    desc: >-
+      第 12:8 位分别屏蔽 CSR 第 4:0 位的事件，为 1 时对应事件不产生中断（事件标志仍会置位）。
+      复位后全部屏蔽。BIOS 提供 GsPutIMR / GsGetIMR 系统调用访问此寄存器。
+    fields:
+      - { bits: "8", name: SIGMSK, reset: 1, desc: "SIGNAL 事件屏蔽" }
+      - { bits: "9", name: FINISHMSK, reset: 1, desc: "FINISH 事件屏蔽" }
+      - { bits: "10", name: HSMSK, reset: 1, desc: "HSINT 事件屏蔽" }
+      - { bits: "11", name: VSMSK, reset: 1, desc: "VSINT 事件屏蔽" }
+      - { bits: "12", name: EDWMSK, reset: 1, desc: "EDWINT 事件屏蔽" }
+      - { bits: "14:13", name: 保留, reset: 3, desc: "复位后两位均为 1；PCSX2 认为这两位应始终为 1，写入时宜保持为 1" }
+    ops:
+      - 允许 VSINT 中断：写 IMR = 0x00007700（只清 VSMSK）。
+    notes:
+      - QEMU 保存写入的全部 64 位；PCSX2 只保存第 12:8 位，并把第 14:13 位固定为 1。
+      - 写 IMR 后立即重新计算 GS 中断输出：清除屏蔽位时，若对应事件标志已为 1，中断立即有效。
+      - QEMU 已实现，但没有测试覆盖。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_update_irq、ps2_gs_reset_hold）"
+      - "PCSX2 pcsx2/GS.h:167（tGS_IMR）"
+      - "PCSX2 pcsx2/GS.h:182（复位值）"
+      - "ps2tek §BIOS（GsGetIMR、GsPutIMR）"
+
+  - name: BUSDIR
+    addr: 0x12001040
+    offset: 0x1040
+    access: R/W
+    status: unimplemented
+    reset: "0x0000000000000000"
+    brief: 主机接口方向（本地 → 主机传输前置 1）
+    desc: >-
+      GS 主机接口的数据方向。读出本地存储器（TRXDIR.XDIR = 1）之前，程序须把 DIR 置 1，使 GIF 总线
+      反向；传输结束后写 0 恢复。QEMU 只保存该寄存器，本地 → 主机传输不检查它。
+    fields:
+      - name: DIR
+        bits: "0"
+        reset: 0
+        desc: 主机接口方向
+        values: { "0": "主机 → 本地（正常）", "1": "本地 → 主机" }
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_priv_write）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:280（GSRegBUSDIR）"
+      - "ps2tek §GS Transfers"
+
+  - name: SIGLBLID
+    addr: 0x12001080
+    offset: 0x1080
+    access: R/W
+    reset: "0x0000000000000000"
+    status: reference
+    brief: SIGNAL / LABEL 写入的标识
+    desc: >-
+      低 32 位 SIGID 由一般寄存器 SIGNAL 更新，高 32 位 LBLID 由一般寄存器 LABEL 更新。更新时只改写掩码
+      （SIGNAL / LABEL 的高 32 位）为 1 的位：新值 = (旧值 & ~IDMSK) | (ID & IDMSK)。程序也可直接写入此寄存器。
+    fields:
+      - { bits: "31:0", name: SIGID, reset: 0, desc: "SIGNAL 标识" }
+      - { bits: "63:32", name: LBLID, reset: 0, desc: "LABEL 标识" }
+    notes:
+      - QEMU 已实现，但没有测试覆盖：qtest 检查 CSR.SIGNAL，但没有读 SIGLBLID。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_SIGNAL、GS_LABEL）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:410（GSRegSIGLBLID）"
+      - "PCSX2 pcsx2/Gif_Unit.cpp:65"

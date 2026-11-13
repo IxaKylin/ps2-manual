@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 576" width="960" height="576" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="576" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 9-2 GS 本地存储器的组织</text>
+  <text x="24" y="58" class="s">地址单位：页 = 8 KB（FBP、ZBP），块 = 256 B（TBP0、CBP、SBP、DBP）。块内的列结构 QEMU 未模拟。</text>
+  <rect x="24" y="76" width="160" height="210" rx="10" class="mem"/>
+  <text x="36" y="98" class="h">4 MB = 512 页</text>
+  <rect x="40" y="108" width="128" height="34" rx="4" class="blk" stroke="#c07a1a"/>
+  <text x="50" y="130" class="n">页 0</text>
+  <text x="106" y="130" class="s">0x000000</text>
+  <rect x="40" y="146" width="128" height="34" rx="4" class="blk" stroke="#c07a1a"/>
+  <text x="50" y="168" class="n">页 1</text>
+  <text x="106" y="168" class="s">0x002000</text>
+  <rect x="40" y="236" width="128" height="34" rx="4" class="blk" stroke="#c07a1a"/>
+  <text x="50" y="258" class="n">页 511</text>
+  <text x="106" y="258" class="s">0x3FE000</text>
+  <text x="98" y="212" class="n">⋮</text>
+  <text x="250" y="104" class="s">一页 = 8 KB = 32 块（PSMCT32 的块排列，64 × 32 像素）</text>
+  <rect x="250" y="120" width="352" height="144" class="mem"/>
+  <rect x="250" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="268" y="143" class="n">0</text>
+  <rect x="294" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="312" y="143" class="n">1</text>
+  <rect x="338" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="356" y="143" class="n">4</text>
+  <rect x="382" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="400" y="143" class="n">5</text>
+  <rect x="426" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="441" y="143" class="n">16</text>
+  <rect x="470" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="485" y="143" class="n">17</text>
+  <rect x="514" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="529" y="143" class="n">20</text>
+  <rect x="558" y="120" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="573" y="143" class="n">21</text>
+  <rect x="250" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="268" y="179" class="n">2</text>
+  <rect x="294" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="312" y="179" class="n">3</text>
+  <rect x="338" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="356" y="179" class="n">6</text>
+  <rect x="382" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="400" y="179" class="n">7</text>
+  <rect x="426" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="441" y="179" class="n">18</text>
+  <rect x="470" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="485" y="179" class="n">19</text>
+  <rect x="514" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="529" y="179" class="n">22</text>
+  <rect x="558" y="156" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="573" y="179" class="n">23</text>
+  <rect x="250" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="268" y="215" class="n">8</text>
+  <rect x="294" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="312" y="215" class="n">9</text>
+  <rect x="338" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="353" y="215" class="n">12</text>
+  <rect x="382" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="397" y="215" class="n">13</text>
+  <rect x="426" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="441" y="215" class="n">24</text>
+  <rect x="470" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="485" y="215" class="n">25</text>
+  <rect x="514" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="529" y="215" class="n">28</text>
+  <rect x="558" y="192" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="573" y="215" class="n">29</text>
+  <rect x="250" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="265" y="251" class="n">10</text>
+  <rect x="294" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="309" y="251" class="n">11</text>
+  <rect x="338" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="353" y="251" class="n">14</text>
+  <rect x="382" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="397" y="251" class="n">15</text>
+  <rect x="426" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="441" y="251" class="n">26</text>
+  <rect x="470" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="485" y="251" class="n">27</text>
+  <rect x="514" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="529" y="251" class="n">30</text>
+  <rect x="558" y="228" width="44" height="36" class="blk" stroke="#c07a1a"/>
+  <text x="573" y="251" class="n">31</text>
+  <text x="250" y="284" class="s">格中数字为块号；每块 8 × 8 像素。QEMU 的块排列表与此相同。</text>
+  <path d="M168 163 H248" class="ln" marker-end="url(#a)"/>
+  <text x="660" y="104" class="s">一块 = 256 B = 4 列 × 64 B（PSMCT32：8 × 8 像素）</text>
+  <rect x="660" y="120" width="276" height="144" class="ext"/>
+  <rect x="660" y="120" width="276" height="36" class="blk" stroke="#8a8f96"/>
+  <text x="672" y="143" class="s">列 0：64 B，第 0–1 行像素（8 × 2）</text>
+  <rect x="660" y="156" width="276" height="36" class="blk" stroke="#8a8f96"/>
+  <text x="672" y="179" class="s">列 1：64 B，第 2–3 行像素（8 × 2）</text>
+  <rect x="660" y="192" width="276" height="36" class="blk" stroke="#8a8f96"/>
+  <text x="672" y="215" class="s">列 2：64 B，第 4–5 行像素（8 × 2）</text>
+  <rect x="660" y="228" width="276" height="36" class="blk" stroke="#8a8f96"/>
+  <text x="672" y="251" class="s">列 3：64 B，第 6–7 行像素（8 × 2）</text>
+  <path d="M602 192 H658" class="ln" marker-end="url(#a)"/>
+  <text x="660" y="284" class="s">列内像素的交错顺序见 PCSX2，本手册不展开。</text>
+  <text x="24" y="322" class="h">各像素格式的页尺寸（按比例绘制，单位：像素）</text>
+  <rect x="40" y="340" width="64" height="32" class="mem"/>
+  <path d="M48 340V372M56 340V372M64 340V372M72 340V372M80 340V372M88 340V372M96 340V372M40 348H104M40 356H104M40 364H104" stroke="#c07a1a" stroke-width="0.8" fill="none"/>
+  <text x="40" y="494" class="n">PSMCT32/24、PSMZ32/24</text>
+  <text x="40" y="512" class="s">页 64 × 32，块 8 × 8，8 × 4 块</text>
+  <rect x="260" y="340" width="64" height="64" class="mem"/>
+  <path d="M276 340V404M292 340V404M308 340V404M260 348H324M260 356H324M260 364H324M260 372H324M260 380H324M260 388H324M260 396H324" stroke="#c07a1a" stroke-width="0.8" fill="none"/>
+  <text x="260" y="494" class="n">PSMCT16/16S、PSMZ16/16S</text>
+  <text x="260" y="512" class="s">页 64 × 64，块 16 × 8，4 × 8 块</text>
+  <rect x="480" y="340" width="128" height="64" class="mem"/>
+  <path d="M496 340V404M512 340V404M528 340V404M544 340V404M560 340V404M576 340V404M592 340V404M480 356H608M480 372H608M480 388H608" stroke="#c07a1a" stroke-width="0.8" fill="none"/>
+  <text x="480" y="494" class="n">PSMT8</text>
+  <text x="480" y="512" class="s">页 128 × 64，块 16 × 16，8 × 4 块</text>
+  <rect x="700" y="340" width="128" height="128" class="mem"/>
+  <path d="M732 340V468M764 340V468M796 340V468M700 356H828M700 372H828M700 388H828M700 404H828M700 420H828M700 436H828M700 452H828" stroke="#c07a1a" stroke-width="0.8" fill="none"/>
+  <text x="700" y="494" class="n">PSMT4</text>
+  <text x="700" y="512" class="s">页 128 × 128，块 32 × 16，4 × 8 块</text>
+  <text x="24" y="540" class="s">PSMT8H、PSMT4HL、PSMT4HH 沿用 PSMCT32 的页与块排列，数据存放在 32 位像素的第 31:24、27:24、31:28 位。</text>
+  <text x="24" y="558" class="s">每页总是 8 KB；FBW / TBW 以 64 像素为单位，PSMT8 / PSMT4 的一页宽 128 像素，占 2 个单位。</text>
+</svg>

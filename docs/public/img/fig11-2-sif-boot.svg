@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 900" width="960" height="900" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 11-2 引导时的 SIF 握手</text>
+  <text x="24" y="58" class="s">实线：写入或 DMA 传输；虚线：读出（箭头指向读取的一方）。上半部分为 Sony BIOS 的访问记录，下半部分为 Linux 与 ps2-lite-bios。</text>
+  <rect x="60" y="76" width="180" height="46" rx="8" class="ee"/>
+  <text x="150" y="96" text-anchor="middle" class="h">EE（R5900）</text>
+  <text x="150" y="113" text-anchor="middle" class="s">0x1000F200 起</text>
+  <rect x="144" y="122" width="12" height="718" class="blk" stroke="#2f6fb2"/>
+  <rect x="390" y="76" width="180" height="46" rx="8" fill="#f4f5f7" stroke="#3a4250" stroke-width="2"/>
+  <text x="480" y="96" text-anchor="middle" class="h">SIF 寄存器 / FIFO</text>
+  <text x="480" y="113" text-anchor="middle" class="s">两侧共用</text>
+  <rect x="474" y="122" width="12" height="718" class="blk" stroke="#3a4250"/>
+  <rect x="720" y="76" width="180" height="46" rx="8" class="iop"/>
+  <text x="810" y="96" text-anchor="middle" class="h">IOP（R3000A）</text>
+  <text x="810" y="113" text-anchor="middle" class="s">0x1D000000 起</text>
+  <rect x="804" y="122" width="12" height="718" class="blk" stroke="#2e8b57"/>
+  <text x="24" y="154" class="h">Sony</text>
+  <text x="24" y="172" class="h">BIOS</text>
+  <text x="24" y="190" class="s">引导记录</text>
+  <path d="M156 150 H472" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="143" text-anchor="middle" class="n">写 CTRL = 0x100，BD6 = 0xFF</text>
+  <path d="M156 184 H472" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="177" text-anchor="middle" class="n">写 MSCOM = 0x80021080，MSFLG = 0x10000</text>
+  <path d="M474 218 H158" class="ln" stroke-dasharray="5 3" marker-end="url(#a)"/>
+  <text x="315" y="211" text-anchor="middle" class="n">循环读 SMFLG 等待 IOP（读出 0）</text>
+  <path d="M486 252 H802" class="ln" stroke-dasharray="5 3" marker-end="url(#a)"/>
+  <text x="645" y="245" text-anchor="middle" class="n">读 BD6；循环读 MSFLG 直到 SIFINIT</text>
+  <path d="M804 286 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="279" text-anchor="middle" class="n">写 CTRL = 0x40；SMCOM = 0</text>
+  <path d="M804 320 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="313" text-anchor="middle" class="n">写 SMFLG = 0x10000（SIFINIT）</text>
+  <path d="M804 354 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="347" text-anchor="middle" class="n">写 SMCOM = 0x19600；SMFLG = BOOTEND</text>
+  <path d="M804 388 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="381" text-anchor="middle" class="n">写 SMFLG = 0x20000（CMDINIT）</text>
+  <path d="M474 422 H158" class="ln" stroke-dasharray="5 3" marker-end="url(#a)"/>
+  <text x="315" y="415" text-anchor="middle" class="n">读出 SMFLG = 0x70000；读 SMCOM</text>
+  <path d="M156 456 H472" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="449" text-anchor="middle" class="n">写 SMFLG = 0x40000，清除 BOOTEND</text>
+  <path d="M156 490 H472" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="483" text-anchor="middle" class="n">ch6 SIF1：IOP 标签 + 8 字数据</text>
+  <path d="M486 490 H802" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="483" text-anchor="middle" class="n">ch10 写入 IOP 0x19600</text>
+  <path d="M804 524 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="517" text-anchor="middle" class="n">ch9 SIF0：6 字</text>
+  <path d="M474 524 H158" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="517" text-anchor="middle" class="n">ch5 写入 EE 0x19870</text>
+  <path d="M804 558 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="551" text-anchor="middle" class="n">加载引导模块后再写 SMFLG = 0x40000</text>
+  <path d="M474 592 H158" class="ln" stroke-dasharray="5 3" marker-end="url(#a)"/>
+  <text x="315" y="585" text-anchor="middle" class="n">读到 BOOTEND，继续引导至 OSDSYS</text>
+  <text x="24" y="644" class="h">Linux</text>
+  <text x="24" y="662" class="s">ps2-lite-bios</text>
+  <text x="24" y="680" class="s">qtest 验证</text>
+  <path d="M804 640 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="633" text-anchor="middle" class="n">写 SUBADDR = 命令缓冲区地址</text>
+  <path d="M804 674 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="667" text-anchor="middle" class="n">写 SMFLG = 0x30000，再写 0x40000</text>
+  <path d="M474 708 H158" class="ln" stroke-dasharray="5 3" marker-end="url(#a)"/>
+  <text x="315" y="701" text-anchor="middle" class="n">读到 BOOTEND，跳到内核入口</text>
+  <path d="M156 742 H472" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="735" text-anchor="middle" class="n">SIF1：INIT_CMD（opt = 0）</text>
+  <path d="M486 742 H802" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="735" text-anchor="middle" class="n">记下 EE 的接收缓冲区地址</text>
+  <path d="M156 776 H472" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="769" text-anchor="middle" class="n">SIF1：INIT_CMD（opt = 1）</text>
+  <path d="M486 776 H802" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="769" text-anchor="middle" class="n">ch10 收到命令包</text>
+  <path d="M804 810 H488" class="ln" marker-end="url(#a)"/>
+  <text x="645" y="803" text-anchor="middle" class="n">SIF0：WRITE_SREG（0, 1）</text>
+  <path d="M474 810 H158" class="ln" marker-end="url(#a)"/>
+  <text x="315" y="803" text-anchor="middle" class="n">EE 软件寄存器 0 = 1</text>
+  <text x="24" y="876" class="s">Linux 的 sif_init 在 INIT_CMD 之前先发 RESET_CMD，IOP 重新启动内核后再次执行上述握手，图中从略。</text>
+</svg>

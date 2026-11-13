@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="560" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 12-2 IOP 中断路径</text>
+
+  <!-- 中断源 -->
+  <text x="40" y="60" class="b">中断源 → I_STAT 位</text>
+  <rect x="40" y="70" width="210" height="24" rx="4" class="blk" stroke="#7a4bb3"/>
+  <text x="50" y="87" class="n">GS 场消隐开始 → 0</text>
+  <rect x="40" y="100" width="210" height="24" rx="4" class="ext"/>
+  <text x="50" y="117" class="n">EE SBUS → 1（未接线）</text>
+  <rect x="40" y="130" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="147" class="n">CDVD → 2</text>
+  <rect x="40" y="160" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="177" class="n">根计数器 T0–T2 → 4–6</text>
+  <rect x="40" y="190" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="207" class="n">SPU2 → 9</text>
+  <rect x="40" y="220" width="210" height="24" rx="4" class="blk" stroke="#7a4bb3"/>
+  <text x="50" y="237" class="n">GS 场消隐结束 → 11</text>
+  <rect x="40" y="250" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="267" class="n">DEV9 → 13</text>
+  <rect x="40" y="280" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="297" class="n">根计数器 T3–T5 → 14–16</text>
+  <rect x="40" y="310" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="327" class="n">SIO2 → 17</text>
+  <rect x="40" y="340" width="210" height="24" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="50" y="357" class="n">USB → 22</text>
+
+  <line x1="250" y1="82" x2="330" y2="82" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="112" x2="330" y2="112" class="ln" stroke-dasharray="5 3" marker-end="url(#a)"/>
+  <line x1="250" y1="142" x2="330" y2="142" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="172" x2="330" y2="172" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="202" x2="330" y2="202" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="232" x2="330" y2="232" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="262" x2="330" y2="262" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="292" x2="330" y2="292" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="322" x2="330" y2="322" class="ln" marker-end="url(#a)"/>
+  <line x1="250" y1="352" x2="330" y2="352" class="ln" marker-end="url(#a)"/>
+
+  <!-- DMA 汇总 -->
+  <rect x="40" y="400" width="270" height="130" rx="6" class="iop"/>
+  <text x="175" y="424" class="h" text-anchor="middle">IOP DMA</text>
+  <rect x="56" y="436" width="238" height="26" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="175" y="454" class="n" text-anchor="middle">DICR：通道 0–6 结束标志</text>
+  <rect x="56" y="468" width="238" height="26" rx="4" class="blk" stroke="#2e8b57"/>
+  <text x="175" y="486" class="n" text-anchor="middle">DICR2：通道 7–12 结束标志</text>
+  <text x="175" y="516" class="s" text-anchor="middle">DICR.31 = BERR 或（MASTER 且有标志）</text>
+  <path d="M310 465H405V370" class="ln" marker-end="url(#a)"/>
+  <text x="414" y="440" class="b">DMA → 第 3 位</text>
+
+  <!-- I_STAT -->
+  <rect x="330" y="70" width="150" height="300" rx="6" class="iop"/>
+  <text x="405" y="196" class="h" text-anchor="middle">I_STAT</text>
+  <text x="405" y="220" class="n" text-anchor="middle">上升沿锁存</text>
+  <text x="405" y="242" class="n" text-anchor="middle">写 0 清零</text>
+  <text x="405" y="262" class="s" text-anchor="middle">0x1F801070</text>
+
+  <!-- I_MASK 与按位与 -->
+  <rect x="560" y="70" width="150" height="80" rx="6" class="iop"/>
+  <text x="635" y="100" class="h" text-anchor="middle">I_MASK</text>
+  <text x="635" y="122" class="n" text-anchor="middle">第 25:0 位</text>
+  <text x="635" y="140" class="s" text-anchor="middle">0x1F801074</text>
+
+  <rect x="560" y="190" width="150" height="60" rx="6" class="blk" stroke="#3a4250"/>
+  <text x="635" y="215" class="n" text-anchor="middle">I_STAT &amp; I_MASK</text>
+  <text x="635" y="236" class="s" text-anchor="middle">任一位为 1</text>
+
+  <line x1="480" y1="220" x2="560" y2="220" class="ln" marker-end="url(#a)"/>
+  <line x1="635" y1="150" x2="635" y2="190" class="ln" marker-end="url(#a)"/>
+
+  <!-- I_CTRL -->
+  <rect x="560" y="300" width="150" height="70" rx="6" class="iop"/>
+  <text x="635" y="326" class="h" text-anchor="middle">I_CTRL.0</text>
+  <text x="635" y="346" class="n" text-anchor="middle">读出即清零</text>
+  <text x="635" y="362" class="s" text-anchor="middle">0x1F801078</text>
+
+  <!-- 与门 -->
+  <rect x="740" y="195" width="50" height="50" rx="6" class="blk" stroke="#3a4250"/>
+  <text x="765" y="226" class="h" text-anchor="middle">与</text>
+  <line x1="710" y1="220" x2="740" y2="220" class="ln" marker-end="url(#a)"/>
+  <path d="M710 335H765V245" class="ln" marker-end="url(#a)"/>
+
+  <!-- R3000A -->
+  <rect x="820" y="150" width="120" height="140" rx="6" class="iop"/>
+  <text x="880" y="176" class="h" text-anchor="middle">R3000A</text>
+  <text x="880" y="200" class="n" text-anchor="middle">CAUSE.IP2</text>
+  <text x="880" y="220" class="s" text-anchor="middle">且 SR.IM2 = 1</text>
+  <text x="880" y="238" class="s" text-anchor="middle">且 SR.IEc = 1</text>
+  <text x="880" y="270" class="n" text-anchor="middle">中断异常</text>
+  <line x1="790" y1="220" x2="820" y2="220" class="ln" marker-end="url(#a)"/>
+
+  <rect x="560" y="430" width="30" height="16" rx="3" class="ext"/>
+  <text x="600" y="443" class="s">虚线框：QEMU 未接线</text>
+  <text x="560" y="470" class="s">IP2 是 IOP 唯一的硬件中断输入，IP0、IP1 为软件中断</text>
+</svg>

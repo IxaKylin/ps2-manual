@@ -1,0 +1,233 @@
+# GIF（图形接口）寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# QEMU 中 GIF 寄存器由 hw/display/ps2_gs.c 实现（ps2-gs 设备的第 1 个 MMIO 区，
+# 映射在 0x10003000，窗口 0x100），只解码 CTRL（0x00）、MODE（0x10）、STAT（0x20）
+# 三个偏移，其余偏移读出为 0 并记录 LOG_UNIMP。GIF FIFO 是 ps2-gs 的第 2 个 MMIO 区，
+# 映射在 0x10006000（窗口 0x1000）。地址常量见 hw/mips/ps2_ee.c 与
+# include/hw/display/ps2_gs.h。
+block: gif
+title: 图形接口 GIF
+page: /chapters/08-gif
+base: 0x10003000
+size: 0x100
+bus: EE 总线
+access_size: 32 位（QEMU 允许 64 位访问，按 32 位实现）
+width: 32
+status: verified
+qemu:
+  files: [include/hw/display/ps2_gs.h, hw/display/ps2_gs.c, hw/mips/ps2_ee.c]
+registers:
+  - name: GIF_CTRL
+    addr: 0x10003000
+    offset: 0x00
+    access: WO
+    reset: 0x00000000
+    status: reference
+    brief: GIF 控制：复位、暂停传输
+    desc: >-
+      GIF 控制寄存器。向 RST 写 1 使 GIF 复位，丢弃正在处理的 GIF 数据包；
+      向 PSE 写 1 暂停 GIF 向 GS 的输出，写 0 恢复。PSE 的当前值反映在 GIF_STAT.PSE 中。
+    fields:
+      - name: RST
+        bits: "0"
+        access: WO
+        reset: 0
+        status: reference
+        desc: 写 1 复位 GIF。QEMU 中复位 GIF 数据包解析器：丢弃当前 GIFtag 的剩余计数和未凑满的四字，并结束进行中的 GS 主机 ⇄ 本地传输。该位不保存，读出为 0
+        values: { "0": "无作用", "1": "复位 GIF" }
+      - { bits: "2:1", name: 保留, reset: 0, desc: 写入时写 0 }
+      - name: PSE
+        bits: "3"
+        reset: 0
+        status: unimplemented
+        desc: 暂停（temporary stop）。为 1 时 GIF 暂停向 GS 输出数据，写 0 恢复传输。暂停期间可读 GIF_TAG0–3、GIF_CNT、GIF_P3CNT、GIF_P3TAG 查看 GIF 内部状态。QEMU 只保存该位，不暂停传输
+        values: { "0": "正常传输", "1": "暂停传输" }
+      - { bits: "31:4", name: 保留, reset: 0, desc: 写入时写 0 }
+    ops:
+      - 复位 GIF：写 GIF_CTRL = 0x00000001。QEMU 中复位立即完成，无需等待。
+      - 暂停后查看内部状态：写 GIF_CTRL = 0x00000008，读 GIF_STAT、GIF_TAG0 等；写 GIF_CTRL = 0x00000000 恢复。
+    notes:
+      - ps2tek 将 GIF_CTRL 列为只写寄存器。QEMU 允许读出，读出值为最近写入值去掉 RST 位。
+      - PCSX2 写入时只保留第 0、3 位，并把 PSE 复制到 GIF_STAT.PSE；QEMU 保存除 RST 外的全部位，GIF_STAT 读出恒为 0。
+      - QEMU 已实现，但没有测试覆盖：没有 qtest 写 GIF_CTRL，RST 的行为依据源码 ps2_gif_write()。
+    source: ["PCSX2 pcsx2/Gif.h:85（tGIF_CTRL）", "PCSX2 pcsx2/HwWrite.cpp:90", "ps2tek §GIF I/O", "QEMU hw/display/ps2_gs.c（ps2_gif_write、ps2_gs_gif_reset）"]
+
+  - name: GIF_MODE
+    addr: 0x10003010
+    offset: 0x10
+    access: WO
+    reset: 0x00000000
+    status: unimplemented
+    brief: GIF 工作模式：PATH3 屏蔽、间歇传输
+    desc: >-
+      设定 PATH3 的屏蔽与间歇传输模式。M3R 与 IMT 的当前值反映在 GIF_STAT 的同名位中。
+      QEMU 保存写入值并可读回，但不按其改变 GIF 的行为。
+    fields:
+      - name: M3R
+        bits: "0"
+        reset: 0
+        desc: PATH3 屏蔽。为 1 时 GIF 不再接受新的 PATH3 数据包；正在传输的 PATH3 数据包传完后屏蔽才生效，PATH3 数据留在 GIF FIFO 中，直到屏蔽解除
+        values: { "0": "允许 PATH3", "1": "屏蔽 PATH3" }
+      - { bits: "1", name: 保留, reset: 0, desc: 写入时写 0 }
+      - name: IMT
+        bits: "2"
+        reset: 0
+        desc: 间歇传输模式（intermittent mode）。为 1 时 PATH3 的 IMAGE 数据可以在传输途中被 PATH1、PATH2 插入，而不必等到 PATH3 数据包结束
+        values: { "0": "连续模式：PATH3 数据包结束后才切换", "1": "间歇模式：PATH3 IMAGE 数据途中可切换" }
+      - { bits: "31:3", name: 保留, reset: 0, desc: 写入时写 0 }
+    notes:
+      - QEMU 不模拟 PATH 仲裁，PATH3 不会被屏蔽或切分；M3R、IMT 只保存。
+      - PCSX2 写入 GIF_MODE 时把 M3R、IMT 复制到 GIF_STAT；M3R 由 1 变为 0 且有待传的 PATH3 数据时重新启动 GIF 通道。
+    source: ["PCSX2 pcsx2/Gif.h:105（tGIF_MODE）", "PCSX2 pcsx2/HwWrite.cpp:103", "ps2tek §GIF I/O", "QEMU hw/display/ps2_gs.c（ps2_gif_write）"]
+
+  - name: GIF_STAT
+    addr: 0x10003020
+    offset: 0x20
+    access: RO
+    reset: 0x00000000
+    status: unimplemented
+    brief: GIF 状态：屏蔽、排队、当前 PATH、FIFO 计数
+    desc: >-
+      GIF 状态寄存器，反映 PATH3 屏蔽、暂停、各 PATH 的请求排队情况、当前正在输出的 PATH、
+      传输方向以及 GIF FIFO 中的四字数。QEMU 读出恒为 0（空闲、无屏蔽、FIFO 空）。
+    fields:
+      - { bits: "0", name: M3R, desc: 为 1 表示 PATH3 被 GIF_MODE.M3R 屏蔽 }
+      - { bits: "1", name: M3P, desc: 为 1 表示 PATH3 被 VIF1 的 MSKPATH3 VIFcode 屏蔽 }
+      - { bits: "2", name: IMT, desc: GIF_MODE.IMT 的当前值，为 1 表示间歇传输模式 }
+      - { bits: "3", name: PSE, desc: GIF_CTRL.PSE 的当前值，为 1 表示传输已暂停 }
+      - { bits: "4", name: 保留, desc: 读出值无意义 }
+      - { bits: "5", name: IP3, desc: 为 1 表示 PATH3 在间歇模式下被中断，等待继续传输 }
+      - { bits: "6", name: P3Q, desc: 为 1 表示 PATH3 有传输请求在排队 }
+      - { bits: "7", name: P2Q, desc: 为 1 表示 PATH2 有传输请求在排队 }
+      - { bits: "8", name: P1Q, desc: 为 1 表示 PATH1 有传输请求在排队 }
+      - { bits: "9", name: OPH, desc: 为 1 表示 GIF 正在向 GS 输出数据 }
+      - name: APATH
+        bits: "11:10"
+        desc: 当前正在传输的 PATH
+        values: { "0": "空闲", "1": "PATH1", "2": "PATH2", "3": "PATH3" }
+      - name: DIR
+        bits: "12"
+        desc: 传输方向
+        values: { "0": "EE → GS", "1": "GS → EE（本地 → 主机传输）" }
+      - { bits: "23:13", name: 保留, desc: 读出值无意义 }
+      - { bits: "28:24", name: FQC, desc: GIF FIFO 中的四字数，0–16 }
+      - { bits: "31:29", name: 保留, desc: 读出值无意义 }
+    notes:
+      - QEMU 读出恒为 0。依赖 APATH、OPH、FQC 等待 GIF 空闲的程序在 QEMU 中会立即认为 GIF 空闲；由于 QEMU 的传输在写入时立即完成，这与 QEMU 的实际状态一致。
+      - 写入 GIF_STAT 在 QEMU 中记录 LOG_UNIMP 并被忽略。
+    source: ["PCSX2 pcsx2/Gif.h:125（tGIF_STAT）", "ps2tek §GIF I/O", "QEMU hw/display/ps2_gs.c（ps2_gif_read）"]
+
+  - name: GIF_TAG0
+    addr: 0x10003040
+    offset: 0x40
+    access: RO
+    status: unimplemented
+    brief: 最近读入的 GIFtag 第 31:0 位
+    desc: >-
+      GIF 最近读入的 GIFtag 的第 31:0 位。只有在 GIF_CTRL.PSE = 1 暂停传输时才能读出有效值。
+      QEMU 不解码该偏移，读出为 0。
+    fields:
+      - { bits: "14:0", name: NLOOP, desc: GIFtag.NLOOP }
+      - { bits: "15", name: EOP, desc: GIFtag.EOP }
+      - { bits: "31:16", name: TAG, desc: GIFtag 第 31:16 位（未使用位） }
+    source: ["PCSX2 pcsx2/Gif.h:156（tGIF_TAG0）", "PCSX2 pcsx2/Hw.h:116", "ps2tek §GIF I/O"]
+
+  - name: GIF_TAG1
+    addr: 0x10003050
+    offset: 0x50
+    access: RO
+    status: unimplemented
+    brief: 最近读入的 GIFtag 第 63:32 位
+    desc: GIF 最近读入的 GIFtag 的第 63:32 位，读出条件同 GIF_TAG0。QEMU 读出为 0。
+    fields:
+      - { bits: "13:0", name: TAG, desc: GIFtag 第 45:32 位（未使用位） }
+      - { bits: "14", name: PRE, desc: GIFtag.PRE }
+      - { bits: "25:15", name: PRIM, desc: GIFtag.PRIM }
+      - { bits: "27:26", name: FLG, desc: GIFtag.FLG }
+      - { bits: "31:28", name: NREG, desc: GIFtag.NREG }
+    source: ["PCSX2 pcsx2/Gif.h:174（tGIF_TAG1）", "PCSX2 pcsx2/Hw.h:117", "ps2tek §GIF I/O"]
+
+  - name: GIF_TAG2
+    addr: 0x10003060
+    offset: 0x60
+    access: RO
+    status: unimplemented
+    brief: 最近读入的 GIFtag 第 95:64 位
+    desc: GIF 最近读入的 GIFtag 的第 95:64 位，即 REGS 的前 8 个寄存器描述符，读出条件同 GIF_TAG0。QEMU 读出为 0。
+    fields:
+      - { bits: "31:0", name: REGS_LO, desc: GIFtag.REGS 第 31:0 位（描述符 0–7） }
+    source: ["PCSX2 pcsx2/Gif.h:260", "PCSX2 pcsx2/Hw.h:118", "ps2tek §GIF I/O"]
+
+  - name: GIF_TAG3
+    addr: 0x10003070
+    offset: 0x70
+    access: RO
+    status: unimplemented
+    brief: 最近读入的 GIFtag 第 127:96 位
+    desc: GIF 最近读入的 GIFtag 的第 127:96 位，即 REGS 的后 8 个寄存器描述符，读出条件同 GIF_TAG0。QEMU 读出为 0。
+    fields:
+      - { bits: "31:0", name: REGS_HI, desc: GIFtag.REGS 第 63:32 位（描述符 8–15） }
+    source: ["PCSX2 pcsx2/Gif.h:262", "PCSX2 pcsx2/Hw.h:119", "ps2tek §GIF I/O"]
+
+  - name: GIF_CNT
+    addr: 0x10003080
+    offset: 0x80
+    access: RO
+    status: unimplemented
+    brief: 当前数据包的循环与寄存器计数
+    desc: >-
+      GIF 处理当前 GIFtag 时的内部计数器：剩余循环次数、正在处理的寄存器描述符，
+      以及 PATH1 传输中的 VU1 数据存储器地址。只有在 GIF_CTRL.PSE = 1 时可以读出。QEMU 读出为 0。
+    fields:
+      - { bits: "14:0", name: LOOPCNT, desc: 循环计数，从 NLOOP 向下递减到 0 }
+      - { bits: "15", name: 保留, desc: 读出值无意义 }
+      - { bits: "19:16", name: REGCNT, desc: 正在处理的寄存器描述符序号 }
+      - { bits: "29:20", name: VUADDR, desc: 正在传输的 VU1 数据存储器地址（PATH1） }
+      - { bits: "31:30", name: 保留, desc: 读出值无意义 }
+    notes:
+      - VUADDR 的宽度依据 ps2tek（第 29:20 位）；PCSX2 的位域定义中 VUADDR 只有 2 位（第 21:20 位），两者不一致，来源不确定。
+      - ps2tek 对 REGCNT 的编号方式描述较含糊，本书只说明其含义，不给出取值表。
+    source: ["PCSX2 pcsx2/Gif.h:194（tGIF_CNT）", "PCSX2 pcsx2/Hw.h:120", "ps2tek §GIF I/O"]
+
+  - name: GIF_P3CNT
+    addr: 0x10003090
+    offset: 0x90
+    access: RO
+    status: unimplemented
+    brief: PATH3 被中断时的循环计数
+    desc: PATH3 在间歇模式下被中断时保存的 PATH3 循环计数。只有在 GIF_CTRL.PSE = 1 时可以读出。QEMU 读出为 0。
+    fields:
+      - { bits: "14:0", name: P3CNT, desc: PATH3 的剩余循环计数 }
+      - { bits: "31:15", name: 保留, desc: 读出值无意义 }
+    source: ["PCSX2 pcsx2/Gif.h:215（tGIF_P3CNT）", "PCSX2 pcsx2/Hw.h:121", "ps2tek §GIF I/O"]
+
+  - name: GIF_P3TAG
+    addr: 0x100030A0
+    offset: 0xA0
+    access: RO
+    status: unimplemented
+    brief: PATH3 被中断时的 GIFtag 第 31:0 位
+    desc: PATH3 被中断时其 GIFtag 的第 31:0 位。只有在 GIF_CTRL.PSE = 1 时可以读出。QEMU 读出为 0。
+    fields:
+      - { bits: "14:0", name: LOOPCNT, desc: PATH3 GIFtag 的 NLOOP }
+      - { bits: "15", name: EOP, desc: PATH3 GIFtag 的 EOP }
+      - { bits: "31:16", name: 保留, desc: 读出值无意义 }
+    source: ["PCSX2 pcsx2/Gif.h:229（tGIF_P3TAG）", "PCSX2 pcsx2/Hw.h:122", "ps2tek §GIF I/O"]
+
+  - name: GIF_FIFO
+    addr: 0x10006000
+    width: 128
+    access: WO
+    brief: PATH3 数据入口（GIF FIFO 窗口）
+    desc: >-
+      GIF FIFO 的写入窗口（0x10006000–0x10006FFF），DMAC 通道 2 以外的另一条 PATH3 入口：
+      R5900 直接用 SQ（或两次 SD）把 GIF 数据包写到这里。真实硬件的 GIF FIFO 深度为 16 个四字，
+      FIFO 中的四字数见 GIF_STAT.FQC。
+    fields:
+      - { bits: "127:0", name: DATA, desc: GIF 数据包的一个四字（GIFtag 或数据） }
+    notes:
+      - QEMU 中该窗口内任意偏移的 4 或 8 字节写入，都按到达顺序依次送入 GIF 数据包解析器，凑满 16 字节即处理一个四字；地址偏移不参与解码。SQ 写入被拆成低 64 位、高 64 位两次，顺序正确。
+      - QEMU 不复制 PCSX2 对 32/64 位 FIFO 写入的处理（PCSX2 把每次 32/64 位写入扩展为一个补零的四字，见 PCSX2 pcsx2/HwWrite.cpp:58–72）。因此程序应只用 SQ 或成对的 SD 写入。
+      - QEMU 中读 GIF FIFO 返回 0 并记录 LOG_GUEST_ERROR；PCSX2 中该 FIFO 同样不可读。
+      - QEMU 没有 FIFO 深度限制，写入立即处理。
+    source: ["PCSX2 pcsx2/Hw.h:34", "PCSX2 pcsx2/Gif.h:72（GIF_Fifo）", "PCSX2 pcsx2/HwRead.cpp:360", "ps2tek §GIF PATH3 Masking", "QEMU hw/display/ps2_gs.c（ps2_gif_fifo_write）"]

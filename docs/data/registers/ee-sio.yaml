@@ -1,0 +1,178 @@
+# EE 调试串口（SIO）寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# offset 相对于 base 0x1000F100，与 QEMU 头文件中的 PS2_SIO_xxx 常量一致。
+# 寄存器名与位定义取自 ps2sdk ee/kernel/include/sio.h；该头文件注明这些定义参考东芝 TX49/TX79
+# 配套芯片的资料并结合 BIOS 代码推断，部分名称并不确定，因此位定义均为参考级。
+block: ee-sio
+title: EE 调试串口 SIO
+page: /chapters/14-peripherals
+base: 0x1000F100
+size: 0x100
+bus: EE 总线
+access_size: 8 位或 32 位（QEMU 接受 1–4 字节访问）
+width: 32
+status: reference
+qemu:
+  files: [include/hw/char/ps2_sio.h, hw/char/ps2_sio.c, hw/mips/ps2_ee.c]
+registers:
+  - name: SIO_LCR
+    addr: 0x1000F100
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 线路控制：数据位、停止位、校验、波特率时钟选择
+    desc: >-
+      线路控制寄存器，设定帧格式。ps2sdk 的 sio_init 写入 SCS | (UEPS << 4) | (UPEN << 3) | (USBL << 2) | UMODE，
+      全部取 0（再加 SCS）即为 8 位数据、无校验、1 位停止位（8N1）。QEMU 只保存写入值，帧格式由主机一侧的字符设备决定。
+    fields:
+      - name: UMODE
+        bits: "0"
+        reset: 0
+        desc: 数据位数
+        values: { "0": "8 位", "1": "7 位" }
+      - { bits: "1", name: 保留, reset: 0, desc: 写入时写 0 }
+      - name: USBL
+        bits: "2"
+        reset: 0
+        desc: 停止位长度
+        values: { "0": "1 位", "1": "2 位" }
+      - name: UPEN
+        bits: "3"
+        reset: 0
+        desc: 校验允许
+        values: { "0": "无校验", "1": "有校验" }
+      - name: UEPS
+        bits: "4"
+        reset: 0
+        desc: 校验方式
+        values: { "0": "奇校验", "1": "偶校验" }
+      - { bits: "5", name: SCS, reset: 0, desc: "时钟选择：为 1 时使用波特率发生器（BGR）对 CPU 时钟分频后的输出" }
+      - { bits: "31:6", name: 保留, reset: 0, desc: 写入时写 0 }
+    source:
+      - "ps2sdk ee/kernel/include/sio.h:29-41"
+      - "ps2sdk ee/kernel/src/sio.c:32、40"
+
+  - name: SIO_LSR
+    addr: 0x1000F110
+    offset: 0x10
+    access: RO
+    reset: 0x00000000
+    status: unimplemented
+    brief: 线路状态：接收数据就绪与各种错误
+    desc: 线路状态寄存器。QEMU 读出恒为 0，写入被忽略。
+    fields:
+      - { bits: "0", name: DR, reset: 0, desc: "接收数据就绪（ps2sdk 注明未经测试）" }
+      - { bits: "1", name: OE, reset: 0, desc: 溢出错误 }
+      - { bits: "2", name: PE, reset: 0, desc: 校验错误 }
+      - { bits: "3", name: FE, reset: 0, desc: 帧错误 }
+      - { bits: "31:4", name: 未知, reset: 0, desc: 含义不明 }
+    source: ["ps2sdk ee/kernel/include/sio.h:44-52", "QEMU hw/char/ps2_sio.c"]
+
+  - name: SIO_IER
+    addr: 0x1000F120
+    offset: 0x20
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 中断允许
+    desc: 中断允许寄存器。QEMU 只保存写入值，不产生 SIO 中断（Linux 驱动以查询方式工作）。
+    fields:
+      - { bits: "0", name: ERDAI, reset: 0, desc: 接收数据可用中断允许 }
+      - { bits: "1", name: 未知, reset: 0, desc: 含义不明 }
+      - { bits: "2", name: ELSI, reset: 0, desc: 线路状态中断允许 }
+      - { bits: "31:3", name: 未知, reset: 0, desc: 含义不明 }
+    source: ["ps2sdk ee/kernel/include/sio.h:55-59", "QEMU hw/char/ps2_sio.c"]
+
+  - name: SIO_ISR
+    addr: 0x1000F130
+    offset: 0x30
+    access: R/W
+    reset: 0x00000000
+    brief: 中断状态与 FIFO 计数（接收字节数、发送 FIFO 占用）
+    desc: >-
+      中断状态寄存器，同时给出两个 FIFO 的占用情况。程序在写 SIO_TXFIFO 前查询第 15:12 位，等于 0x8 表示发送 FIFO 已满；
+      查询第 11:8 位是否不为 0 来判断有无接收数据。ps2sdk 的 sio_getc 每读出一个字节后向该寄存器写 7，清除第 2:0 位的状态。
+      QEMU 实现接收计数：第 11:8 位为接收 FIFO 中的字节数（0–15，16 个字节时读出 15）；发送即时完成，第 15:12 位
+      总为 0；第 2:0 位读出为 0，写入被忽略。
+    fields:
+      - { bits: "0", name: RX_DATA, reset: 0, status: unimplemented, desc: 有接收数据 }
+      - { bits: "1", name: TX_EMPTY, reset: 0, status: unimplemented, desc: 发送 FIFO 空 }
+      - { bits: "2", name: RX_ERROR, reset: 0, status: unimplemented, desc: 接收错误 }
+      - { bits: "7:3", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "11:8", name: RX_COUNT, access: RO, reset: 0, desc: 接收 FIFO 中的字节数 }
+      - { bits: "15:12", name: TX_LEVEL, access: RO, reset: 0, desc: "发送 FIFO 占用；0x8 表示已满。QEMU 中总为 0" }
+      - { bits: "31:16", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+    notes:
+      - QEMU 已实现接收计数，但没有测试覆盖。
+    source:
+      - "ps2sdk ee/kernel/include/sio.h:62-65"
+      - "ps2sdk ee/kernel/src/sio.c:73、86-88、101"
+      - "QEMU hw/char/ps2_sio.c（文件头说明、ps2_sio_read）"
+
+  - name: SIO_FCR
+    addr: 0x1000F140
+    offset: 0x40
+    access: R/W
+    reset: 0x00000000
+    brief: FIFO 控制：FIFO 复位
+    desc: >-
+      FIFO 控制寄存器。ps2sdk 的 sio_init 先写 FRSTE | RFRST | TFRST（0x07）复位两个 FIFO，再写 0 允许它们工作。
+      QEMU 中写入 RFRST = 1 时清空接收 FIFO；其余位只保存。
+    fields:
+      - { bits: "0", name: FRSTE, reset: 0, status: unimplemented, desc: FIFO 复位允许 }
+      - { bits: "1", name: RFRST, reset: 0, desc: "接收 FIFO 复位。QEMU 中写 1 清空接收 FIFO" }
+      - { bits: "2", name: TFRST, reset: 0, status: unimplemented, desc: "发送 FIFO 复位。QEMU 发送即时完成，无需复位" }
+      - { bits: "31:3", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2sdk ee/kernel/include/sio.h:68-74", "ps2sdk ee/kernel/src/sio.c:48-50", "QEMU hw/char/ps2_sio.c"]
+
+  - name: SIO_BGR
+    addr: 0x1000F150
+    offset: 0x50
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 波特率发生器：分频值与预分频选择
+    desc: >-
+      波特率发生器设定。ps2sdk 的 sio_init 以 CPU 时钟 294.912 MHz 计算：BRD = 294912000 / (波特率 × 256)；
+      若 BRD ≥ 256，则把 BRD 除以 4 并把 BCLK 加 1，最多到 BCLK = 3。写入值为 (BCLK << 8) | BRD。
+      QEMU 只保存写入值，不模拟波特率。
+    fields:
+      - { bits: "7:0", name: BRD, reset: 0, desc: 波特率分频值 }
+      - { bits: "9:8", name: BCLK, reset: 0, desc: "预分频选择，每加 1 时钟再除以 4" }
+      - { bits: "31:10", name: 未知, reset: 0, desc: 含义不明 }
+    source: ["ps2sdk ee/kernel/include/sio.h:77", "ps2sdk ee/kernel/src/sio.c:30、52-57"]
+
+  - name: SIO_TXFIFO
+    addr: 0x1000F180
+    offset: 0x80
+    width: 8
+    access: WO
+    status: verified
+    brief: 发送 FIFO：写入一个字节即送出
+    desc: >-
+      发送 FIFO。写入的字节经串口送出。QEMU 把写入的字节立即送往主机字符设备 serial_hd(0)（通常为 -serial 指定的
+      终端，Linux 中为 ttyS0），读出为 0。Sony BIOS 的启动信息与 Linux 控制台输出都经此送出。
+    notes:
+      - 没有专门的 qtest；由 Sony BIOS 与 Linux 启动时的串口输出验证。
+      - ps2tek 把 0x1000F180 列为 KPUTCHAR（控制台输出）。
+    source:
+      - "ps2sdk ee/kernel/include/sio.h:80"
+      - "ps2sdk ee/kernel/src/sio.c:73-76（sio_putc）"
+      - "ps2tek §Memory Map（Misc registers）"
+      - "QEMU hw/char/ps2_sio.c（ps2_sio_write）"
+
+  - name: SIO_RXFIFO
+    addr: 0x1000F1C0
+    offset: 0xC0
+    width: 8
+    access: RO
+    brief: 接收 FIFO：读出一个字节
+    desc: >-
+      接收 FIFO。每读一次取出一个字节。QEMU 的接收 FIFO 深度为 16 字节，从主机字符设备接收；FIFO 为空时读出 0。
+      读前应先查询 SIO_ISR 第 11:8 位。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["ps2sdk ee/kernel/include/sio.h:82", "ps2sdk ee/kernel/src/sio.c:86-88", "QEMU hw/char/ps2_sio.c（ps2_sio_pop）"]

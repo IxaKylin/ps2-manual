@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" width="960" height="520" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 10-1 IPU 结构与数据流</text>
+  <text x="24" y="58" class="s">箭头表示数据流向。虚线框内为 IPU，QEMU 未模拟；CSC、PACK 命令的源数据也经输入 FIFO 送入，不经过 VLC/IQ/IDCT。</text>
+
+  <!-- main memory -->
+  <rect x="24" y="110" width="150" height="300" rx="12" class="mem"/>
+  <text x="38" y="136" class="h">主存 RDRAM</text>
+  <text x="38" y="160" class="s">MPEG 码流</text>
+  <text x="38" y="178" class="s">（toIPU 读取）</text>
+  <text x="38" y="354" class="s">解码结果图像</text>
+  <text x="38" y="372" class="s">（fromIPU 写入）</text>
+
+  <!-- DMAC channels and CPU -->
+  <rect x="210" y="130" width="150" height="60" rx="8" class="ee"/>
+  <text x="222" y="154" class="h">DMAC ch4</text>
+  <text x="222" y="176" class="s">toIPU 0x1000B400</text>
+  <rect x="210" y="230" width="150" height="60" rx="8" class="ee"/>
+  <text x="222" y="254" class="h">R5900</text>
+  <text x="222" y="276" class="s">经 EE 总线读写寄存器</text>
+  <rect x="210" y="330" width="150" height="60" rx="8" class="ee"/>
+  <text x="222" y="354" class="h">DMAC ch3</text>
+  <text x="222" y="376" class="s">fromIPU 0x1000B000</text>
+
+  <!-- IPU outline -->
+  <rect x="390" y="86" width="546" height="340" rx="14" class="ext"/>
+  <text x="406" y="112" class="h">IPU（QEMU 未模拟）</text>
+
+  <!-- row 1 -->
+  <rect x="410" y="130" width="120" height="60" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="422" y="154" class="h">输入 FIFO</text>
+  <text x="422" y="176" class="s">0x10007010</text>
+  <rect x="570" y="130" width="150" height="60" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="582" y="154" class="h">码流解码 VLC</text>
+  <text x="582" y="176" class="s">宏块头、运动矢量、系数</text>
+  <rect x="760" y="130" width="160" height="60" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="772" y="154" class="h">反量化 IQ</text>
+  <text x="772" y="176" class="s">IQ/NIQ 矩阵（SETIQ）</text>
+
+  <!-- control registers -->
+  <rect x="410" y="230" width="330" height="60" rx="6" class="gfx"/>
+  <text x="422" y="254" class="n">控制寄存器 0x10002000–0x10002030</text>
+  <text x="422" y="276" class="s">IPU_CMD（命令）、IPU_CTRL（参数）、IPU_BP、IPU_TOP</text>
+
+  <!-- row 2 -->
+  <rect x="410" y="330" width="120" height="60" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="422" y="354" class="h">输出 FIFO</text>
+  <text x="422" y="376" class="s">0x10007000</text>
+  <rect x="570" y="330" width="150" height="60" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="582" y="354" class="h">CSC / 抖动 / VQ</text>
+  <text x="582" y="376" class="s">RGB32、RGB16、INDX4</text>
+  <rect x="760" y="330" width="160" height="60" rx="6" class="blk" stroke="#7a4bb3"/>
+  <text x="772" y="354" class="h">IDCT</text>
+  <text x="772" y="376" class="s">8×8 反变换，得 YCbCr</text>
+
+  <!-- connectors -->
+  <path d="M174 160 H208" class="ln" marker-end="url(#a)"/>
+  <path d="M360 160 H408" class="ln" marker-end="url(#a)"/>
+  <path d="M530 160 H568" class="ln" marker-end="url(#a)"/>
+  <path d="M720 160 H758" class="ln" marker-end="url(#a)"/>
+  <path d="M840 190 V328" class="ln" marker-end="url(#a)"/>
+  <path d="M760 360 H722" class="ln" marker-end="url(#a)"/>
+  <path d="M570 360 H532" class="ln" marker-end="url(#a)"/>
+  <path d="M410 360 H362" class="ln" marker-end="url(#a)"/>
+  <path d="M210 360 H176" class="ln" marker-end="url(#a)"/>
+  <path d="M360 260 H408" class="ln" marker-start="url(#a)" marker-end="url(#a)"/>
+
+  <!-- BDEC bypass and VDEC/FDEC results (dashed: not modelled) -->
+  <path d="M800 390 V406 H470 V392" class="ln" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="560" y="420" class="b">BDEC：YCbCr 不经 CSC，直接进入输出 FIFO</text>
+  <path d="M645 190 V228" class="ln" stroke-dasharray="6 4" marker-end="url(#a)"/>
+  <text x="652" y="214" class="b">VDEC/FDEC 结果 → IPU_CMD</text>
+
+  <text x="24" y="458" class="s">命令结束时 IPU 向 INTC 位 8（IPU）发出中断请求（依据 PCSX2）。</text>
+  <text x="24" y="498" class="s">虚线箭头：BDEC 输出 16 位 YCbCr，绕过 CSC 送入输出 FIFO；VDEC、FDEC 的结果由程序读 IPU_CMD 取得。</text>
+  <text x="24" y="478" class="s">QEMU 中 0x10002000 与 0x10007000 两个窗口为未实现设备，DMAC 通道 3/4 没有接外设。</text>
+</svg>

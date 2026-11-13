@@ -1,0 +1,139 @@
+# IPU 寄存器。格式说明见 docs/data/SCHEMA.md。
+# QEMU 未实现 IPU（hw/mips/ps2_ee.c 中为未实现设备 ps2.ipu 与 ps2.ipu-fifo），
+# 本文件内容全部依据 PCSX2，状态为 unimplemented。
+block: ipu
+title: 图像处理单元 IPU
+page: /chapters/10-ipu
+base: 0x10002000
+size: 0x1000
+bus: EE 总线
+access_size: 控制寄存器 32/64 位；FIFO 窗口 128 位（依据 PCSX2）
+width: 32
+status: unimplemented
+source: ["PCSX2 pcsx2/Hw.h:19", "PCSX2 pcsx2/Hw.h:108", "PCSX2 pcsx2/IPU/IPU.h:20"]
+registers:
+  - name: IPU_CMD
+    addr: 0x10002000
+    offset: 0x000
+    width: 64
+    access: R/W
+    reset: "0x0000000000000000"
+    brief: 写入为 IPU 命令；读出为命令结果与 BUSY 标志
+    desc: >-
+      写入时启动一条 IPU 命令：位 31:28 为命令码（见 10.2 节表 10-1），位 27:0 为命令参数。
+      读出时为 64 位：低 32 位 DATA 是 VDEC、FDEC 等命令返回的结果，位 63 为 BUSY，
+      结果尚未准备好时为 1。PCSX2 对 32 位与 64 位写入都只取低 32 位作为命令。
+    fields:
+      - { bits: "31:0", name: DATA, access: R/W, desc: 写入为命令字（位 31:28 命令码，位 27:0 参数）；读出为命令结果 }
+      - { bits: "62:32", name: 保留, access: RO, desc: 读出为 0 }
+      - { bits: "63", name: BUSY, access: RO, desc: 为 1 表示 DATA 中的结果尚未有效 }
+    notes:
+      - 写命令前应确认 IPU_CTRL.BUSY 为 0。PCSX2 在 IPU 忙时写入新命令不报错，直接覆盖。
+      - PCSX2 中最近的命令不是 VDEC、FDEC 时，读 IPU_CMD 返回码流中接下来的 32 位，并按字节反序（大端）排列（pcsx2/IPU/IPU.cpp:228–231）。
+    source: ["PCSX2 pcsx2/Hw.h:108", "PCSX2 pcsx2/IPU/IPU.h:20", "PCSX2 pcsx2/IPU/IPU.h:264", "PCSX2 pcsx2/IPU/IPU.cpp:378", "PCSX2 pcsx2/IPU/IPU.cpp:228–231"]
+
+  - name: IPU_CTRL
+    addr: 0x10002010
+    offset: 0x010
+    access: R/W
+    brief: IPU 控制与状态：FIFO 计数、解码参数、复位与忙标志
+    desc: >-
+      低 16 位为只读状态（FIFO 计数、CBP、错误与起始码标志）；位 17:16 与位 26:20 为解码参数，
+      由程序按 MPEG 码流的图像头和图像编码扩展设置；位 30 为软件复位；位 31 为忙标志。
+      PCSX2 写入时只接受掩码 0x47F30000 内的位。
+    fields:
+      - { bits: "3:0", name: IFC, access: RO, desc: 输入 FIFO 中的四字数（0–8） }
+      - { bits: "7:4", name: OFC, access: RO, desc: 输出 FIFO 中的四字数（0–8） }
+      - { bits: "13:8", name: CBP, access: RO, desc: 最近解码的宏块的编码块模式（coded block pattern） }
+      - { bits: "14", name: ECD, access: RO, desc: 错误码检测。解码时在码流中遇到非法码字（例如不是起始码的 0x000000 前缀）时置 1；写入新命令时清零 }
+      - { bits: "15", name: SCD, access: RO, desc: 起始码检测。解码过程中在码流中遇到起始码时置 1；写入新命令时清零 }
+      - bits: "17:16"
+        name: IDP
+        access: R/W
+        desc: 帧内 DC 系数精度（对应 MPEG-2 intra_dc_precision）
+        values:
+          "0b00": 8 位
+          "0b01": 9 位
+          "0b10": 10 位
+          "0b11": 保留（PCSX2 写入时改为 0b01）
+      - { bits: "19:18", name: 保留, access: RO, desc: 写入无效 }
+      - { bits: "20", name: AS, access: R/W, desc: "扫描方式：0 = Z 字形（zig-zag）扫描，1 = 交替扫描（alternate scan）" }
+      - { bits: "21", name: IVF, access: R/W, desc: 帧内 VLC 格式（对应 MPEG-2 intra_vlc_format），选择帧内块使用的 DCT 系数码表 }
+      - { bits: "22", name: QST, access: R/W, desc: 量化步长类型（对应 MPEG-2 q_scale_type）：0 = 线性，1 = 非线性 }
+      - { bits: "23", name: MP1, access: R/W, desc: "码流类型：0 = MPEG-2，1 = MPEG-1" }
+      - bits: "26:24"
+        name: PCT
+        access: R/W
+        desc: 图像编码类型（对应 picture_coding_type）
+        values:
+          "1": I 图像
+          "2": P 图像
+          "3": B 图像
+          "4": D 图像（仅 MPEG-1）
+      - { bits: "29:27", name: 保留, access: RO, desc: 写入无效 }
+      - { bits: "30", name: RST, access: WO, desc: 写 1 使 IPU 软件复位：清空输入/输出 FIFO 与码流位置，清除 IPU_TOP，中止当前命令。复位完成后该位读出为 0 }
+      - { bits: "31", name: BUSY, access: RO, desc: 为 1 表示 IPU 正在执行命令 }
+    ops:
+      - 复位 IPU：写 IPU_CTRL = 0x40000000，然后写 IPU_CMD = 0x00000000（BCLR）清空输入 FIFO。
+      - 开始解码一幅图像前，按图像头设置 PCT、IDP、AS、IVF、QST、MP1。
+    notes:
+      - PCSX2 中 IPU 命令结束时向 INTC 位 8（IPU）发中断请求，BCLR、SETTH 立即结束并发中断。
+      - PCSX2 中 RST 软件复位结束时也向 INTC 位 8 发中断请求（pcsx2/IPU/IPU.cpp:330）。
+      - PCSX2 执行 IDEC 时把 PCT 强制设为 1（I 图像），不论程序写入的值（pcsx2/IPU/IPU.cpp:405）。
+    source: ["PCSX2 pcsx2/Hw.h:109", "PCSX2 pcsx2/IPU/IPU.h:35", "PCSX2 pcsx2/IPU/IPU.h:60", "PCSX2 pcsx2/IPU/IPU.cpp:348", "PCSX2 pcsx2/IPU/IPU.cpp:330", "PCSX2 pcsx2/IPU/IPU.cpp:405", "PCSX2 pcsx2/IPU/mpeg2_vlc.h:56", "PCSX2 pcsx2/Dmac.h:214"]
+
+  - name: IPU_BP
+    addr: 0x10002020
+    offset: 0x020
+    access: RO
+    brief: 码流读取位置与 FIFO 填充状态
+    desc: >-
+      反映 IPU 内部码流缓冲区的状态。IPU 从输入 FIFO 取出最多两个四字放入内部缓冲区，
+      BP 是当前读取位置在缓冲区第一个四字中的位偏移。
+    fields:
+      - { bits: "6:0", name: BP, access: RO, desc: 码流位指针（0–127） }
+      - { bits: "7", name: 保留, access: RO, desc: 读出为 0 }
+      - { bits: "11:8", name: IFC, access: RO, desc: 输入 FIFO 中的四字数，与 IPU_CTRL.IFC 相同 }
+      - { bits: "15:12", name: 保留, access: RO, desc: 读出为 0 }
+      - { bits: "17:16", name: FP, access: RO, desc: 内部码流缓冲区中有效四字数（0–2） }
+      - { bits: "31:18", name: 保留, access: RO, desc: 读出为 0 }
+    notes:
+      - 中途切换码流或用 BCLR 重新定位时，可由 IFC、FP 与 BP 计算 IPU 已经取走但尚未消耗的数据量。
+    source: ["PCSX2 pcsx2/Hw.h:110", "PCSX2 pcsx2/IPU/IPU.h:68", "PCSX2 pcsx2/IPU/IPU.cpp:247"]
+
+  - name: IPU_TOP
+    addr: 0x10002030
+    offset: 0x030
+    width: 64
+    access: RO
+    brief: 码流当前位置之后的 32 位（预读，不消耗）
+    desc: >-
+      低 32 位 BSTOP 为码流中当前位置开始的 32 位数据，程序可用它查看下一个码字或起始码，
+      而不移动码流位置；位 63 为 BUSY，数据尚未准备好（输入 FIFO 数据不足）时为 1。
+    fields:
+      - { bits: "31:0", name: BSTOP, access: RO, desc: 码流当前位置开始的 32 位 }
+      - { bits: "62:32", name: 保留, access: RO, desc: 读出为 0 }
+      - { bits: "63", name: BUSY, access: RO, desc: 为 1 表示 BSTOP 尚未有效 }
+    source: ["PCSX2 pcsx2/Hw.h:111", "PCSX2 pcsx2/IPU/IPU.h:239", "PCSX2 pcsx2/IPU/IPU.cpp:297"]
+
+  - name: IPU_out_FIFO
+    addr: 0x10007000
+    width: 128
+    access: RO
+    brief: 输出 FIFO 读端口（8 个四字深），通常由 fromIPU DMA（通道 3）读取
+    desc: >-
+      IPU 解码或转换的结果写入输出 FIFO，fromIPU DMA 通道把它搬到主存；R5900 也可以 128 位读取该地址直接取数。
+      输出 FIFO 深度为 8 个四字，当前四字数见 IPU_CTRL.OFC；FIFO 满时 IPU 暂停，直到有数据被取走。
+    notes:
+      - PCSX2 在 OFC 为 0 时读该端口不返回新数据，程序应先检查 OFC。
+    source: ["PCSX2 pcsx2/Hw.h:174", "PCSX2 pcsx2/Hw.h:36", "PCSX2 pcsx2/IPU/IPU_Fifo.h:24", "PCSX2 pcsx2/IPU/IPU_Fifo.cpp:155", "PCSX2 pcsx2/HwRead.cpp:351"]
+
+  - name: IPU_in_FIFO
+    addr: 0x10007010
+    width: 128
+    access: WO
+    brief: 输入 FIFO 写端口（8 个四字深），通常由 toIPU DMA（通道 4）写入
+    desc: >-
+      码流、量化矩阵、VQ 色表以及 CSC/PACK 的源数据都经输入 FIFO 送入 IPU。toIPU DMA 通道把主存中的数据写入该 FIFO；
+      R5900 也可以 128 位写入该地址。FIFO 深度为 8 个四字，当前四字数见 IPU_CTRL.IFC。读该地址返回 0。
+    source: ["PCSX2 pcsx2/Hw.h:175", "PCSX2 pcsx2/IPU/IPU_Fifo.h:13", "PCSX2 pcsx2/IPU/IPU_Fifo.cpp:166", "PCSX2 pcsx2/HwWrite.cpp:458", "PCSX2 pcsx2/IPU/IPUdma.cpp:42"]

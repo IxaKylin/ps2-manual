@@ -1,0 +1,262 @@
+# EE 定时器 T0–T3 寄存器。格式说明见 docs/data/SCHEMA.md。
+# 4 个通道结构相同，通道 n 的寄存器位于 0x10000000 + n × 0x800。
+# T0_* 给出完整说明，T1–T3 的同名寄存器标记 nodetail，只在汇总表中列出。
+block: ee-timer
+title: EE 定时器
+page: /chapters/05-ee-timer
+base: 0x10000000
+size: 0x2000
+bus: EE 总线
+access_size: 32 位（QEMU 另接受 64 位访问，按低 32 位处理；不接受 8/16 位访问）
+width: 32
+status: verified
+qemu:
+  files: [include/hw/timer/ps2_timer.h, hw/timer/ps2_timer.c, hw/mips/ps2_ee.c]
+source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:90", "ps2tek §EE Timers"]
+registers:
+  # ---------------------------------------------------------------- T0
+  - name: T0_COUNT
+    addr: 0x10000000
+    offset: 0x000
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    brief: 定时器 0 计数值
+    desc: >-
+      16 位递增计数器的当前值。T0_MODE.CUE 为 1 时，计数器按 T0_MODE.CLKS 选定的时钟加 1；
+      CUE 为 0 时保持不变。写入时将计数器置为写入值的低 16 位，计数从写入时刻重新开始。
+    fields:
+      - { bits: "15:0", name: COUNT, reset: 0, desc: 当前计数值 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    ops:
+      - 读 T0_COUNT 得到当前计数值，可用于测量时间间隔；两次读数之差按 16 位无符号数计算即可处理一次回绕。
+      - 写 0 使计数器从 0 重新开始。写 COUNT 不影响 EQUF、OVFF 标志。
+    notes:
+      - 计数到 0xFFFF 后再加 1 回到 0x0000，即发生溢出（见 T0_MODE.OVFE/OVFF）。
+      - QEMU 已实现，但没有测试覆盖：qtest ps2/irq 不读写 COUNT。
+    source: ["QEMU hw/timer/ps2_timer.c（ps2_timer_read/ps2_timer_write）", "PCSX2 pcsx2/Counters.cpp:922", "ps2tek §EE Timers"]
+
+  - name: T0_MODE
+    addr: 0x10000010
+    offset: 0x010
+    access: R/W
+    reset: 0x00000000
+    brief: 定时器 0 模式与状态
+    desc: >-
+      选择计数时钟、门控方式，控制计数使能、比较归零和中断使能，并给出比较相等与溢出两个中断标志。
+      位 9:0 为普通读写位；位 11:10 为标志位，写 1 清零，写 0 无影响。写 T0_MODE 不会清除计数值。
+    fields:
+      - bits: "1:0"
+        name: CLKS
+        reset: 0
+        desc: 计数时钟选择。BUSCLK 为 EE 总线时钟 147.456 MHz（R5900 核心时钟的一半）。qtest 只覆盖 0b00；其余取值 QEMU 已实现，但没有测试覆盖。
+        values:
+          "0b00": BUSCLK，147.456 MHz
+          "0b01": BUSCLK / 16，9.216 MHz
+          "0b10": BUSCLK / 256，576 kHz
+          "0b11": HBLNK 行消隐信号，NTSC 约 15.73 kHz，PAL 约 15.63 kHz
+      - bits: "2"
+        name: GATE
+        reset: 0
+        status: unimplemented
+        desc: 门控使能。为 1 时计数受 GATS 选定的门控信号控制，控制方式由 GATM 决定。QEMU 只保存该位，不实现门控。
+        values:
+          "0": 不使用门控
+          "1": 使用门控
+      - bits: "3"
+        name: GATS
+        reset: 0
+        status: unimplemented
+        desc: 门控信号选择。CLKS = 0b11（以 HBLNK 计数）时，选择 HBLNK 门控无效。QEMU 只保存该位。
+        values:
+          "0": HBLNK（行消隐）
+          "1": VBLNK（场消隐）
+      - bits: "5:4"
+        name: GATM
+        reset: 0
+        status: unimplemented
+        desc: 门控方式。QEMU 只保存该位域。
+        values:
+          "0b00": 门控信号无效（低电平，非消隐期）时计数，有效时暂停
+          "0b01": 门控信号上升沿（消隐开始）时计数器清零并开始计数
+          "0b10": 门控信号下降沿（消隐结束）时计数器清零并开始计数
+          "0b11": 门控信号上升沿和下降沿都使计数器清零
+      - bits: "6"
+        name: ZRET
+        reset: 0
+        status: reference
+        desc: 比较归零。为 1 时，计数值达到 T0_COMP 后回到 0，计数周期为 COMP 个时钟。QEMU 已实现，但没有测试覆盖。
+        values:
+          "0": 计数到 0xFFFF 后回绕
+          "1": 计数值等于 COMP 时清零
+      - bits: "7"
+        name: CUE
+        reset: 0
+        desc: 计数使能。
+        values:
+          "0": 停止计数，计数值保持
+          "1": 开始计数
+      - bits: "8"
+        name: CMPE
+        reset: 0
+        desc: 比较中断使能。为 1 时，计数值达到 T0_COMP 置 EQUF 并产生中断。
+      - bits: "9"
+        name: OVFE
+        reset: 0
+        status: reference
+        desc: 溢出中断使能。为 1 时，计数值由 0xFFFF 变为 0x0000 置 OVFF 并产生中断。QEMU 已实现，但没有测试覆盖。
+      - bits: "10"
+        name: EQUF
+        access: R/W1C
+        reset: 0
+        status: reference
+        desc: 比较相等标志。CMPE 为 1 且发生比较相等时置 1；写 1 清零。比较相等产生的中断有 qtest 覆盖；本标志的读出与写 1 清零 QEMU 已实现，但没有测试覆盖。
+      - bits: "11"
+        name: OVFF
+        access: R/W1C
+        reset: 0
+        status: reference
+        desc: 溢出标志。OVFE 为 1 且发生溢出时置 1；写 1 清零。QEMU 已实现，但没有测试覆盖。
+      - { bits: "31:12", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    ops:
+      - 设置模式：先写 T0_COMP，再写 T0_MODE，例如 0x000003C0 + CLKS（ZRET、CUE、CMPE、OVFE 为 1），同时将 EQUF、OVFF 写 0 以保留未处理的标志；初始化时可写 0x00000FC0 一并清除旧标志。
+      - 中断处理程序中读 T0_MODE，判断 EQUF/OVFF，然后只对要清除的标志位写 1，其余位按原值写回。
+      - 只修改控制位时，应将读出值的位 11:10 清零后再写回，否则会误清除尚未处理的标志。
+    notes:
+      - 中断为边沿方式：只有 EQUF 或 OVFF 由 0 变为 1 时才向 INTC 发出一次中断。标志未清除时，后续的比较相等或溢出不再产生中断。
+      - CMPE 为 0 时，比较相等不置 EQUF；OVFE 为 0 时，溢出不置 OVFF。
+    source: ["QEMU include/hw/timer/ps2_timer.h（PS2_TIMER_MODE_*）", "QEMU hw/timer/ps2_timer.c（ps2_timer_advance）", "PCSX2 pcsx2/Counters.h:8", "PCSX2 pcsx2/Counters.cpp:898", "ps2tek §EE Timers"]
+
+  - name: T0_COMP
+    addr: 0x10000020
+    offset: 0x020
+    access: R/W
+    reset: 0x00000000
+    brief: 定时器 0 比较值
+    desc: >-
+      16 位比较值。计数值增加到 T0_COMP 时发生比较相等：CMPE 为 1 则置 EQUF；ZRET 为 1 则计数器清零。
+    fields:
+      - { bits: "15:0", name: COMP, reset: 0, desc: 比较值 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    ops:
+      - 周期中断：周期 = COMP / f(CLKS)。例如 CLKS = 0b10（576 kHz）、COMP = 576 时周期为 1 ms。
+      - 单次定时：ZRET 为 0 时写 COMP = 当前 COUNT + N（按 16 位回绕），N 个时钟后产生一次比较中断。
+    notes:
+      - 写入的 COMP 不大于当前计数值时，不会立即产生比较相等，须等计数器回绕后再次达到 COMP。
+      - ZRET 为 1 且 COMP 为 0 时，QEMU 按周期 0x10000 处理。
+    source: ["QEMU hw/timer/ps2_timer.c（ps2_timer_period）", "PCSX2 pcsx2/Counters.cpp:940", "ps2tek §EE Timers"]
+
+  - name: T0_HOLD
+    addr: 0x10000030
+    offset: 0x030
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 定时器 0 保持值（SBUS 中断时锁存）
+    desc: >-
+      当 INTC 的 SBUS 中断（I_STAT 位 1）发生时，硬件将 T0_COUNT 的值锁存到 T0_HOLD，
+      程序可据此得到 IOP 发出中断的时刻。只有 T0、T1 有 HOLD 寄存器。
+    fields:
+      - { bits: "15:0", name: HOLD, reset: 0, desc: SBUS 中断发生时的计数值 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 将该寄存器作为普通 16 位存储单元，可读写，但不在 SBUS 中断时锁存计数值。
+    source: ["PCSX2 pcsx2/Hw.cpp:70", "ps2tek §EE Timers", "QEMU hw/timer/ps2_timer.c（PS2_TIMER_HOLD 仅存储）"]
+
+  # ---------------------------------------------------------------- T1
+  - name: T1_COUNT
+    addr: 0x10000800
+    offset: 0x800
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    brief: 定时器 1 计数值，同 T0_COUNT
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:95"]
+  - name: T1_MODE
+    addr: 0x10000810
+    offset: 0x810
+    access: R/W
+    reset: 0x00000000
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_MODE（0x10）"
+    brief: 定时器 1 模式与状态，同 T0_MODE
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:96"]
+  - name: T1_COMP
+    addr: 0x10000820
+    offset: 0x820
+    access: R/W
+    reset: 0x00000000
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_COMP（0x20）"
+    brief: 定时器 1 比较值，同 T0_COMP
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:97"]
+  - name: T1_HOLD
+    addr: 0x10000830
+    offset: 0x830
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    nodetail: true
+    brief: 定时器 1 保持值，同 T0_HOLD
+    source: ["PCSX2 pcsx2/Hw.h:98", "PCSX2 pcsx2/Hw.cpp:72"]
+
+  # ---------------------------------------------------------------- T2
+  - name: T2_COUNT
+    addr: 0x10001000
+    offset: 0x1000
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_COUNT（0x00）"
+    brief: 定时器 2 计数值，同 T0_COUNT
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:100"]
+  - name: T2_MODE
+    addr: 0x10001010
+    offset: 0x1010
+    access: R/W
+    reset: 0x00000000
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_MODE（0x10）"
+    brief: 定时器 2 模式与状态，同 T0_MODE
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:101"]
+  - name: T2_COMP
+    addr: 0x10001020
+    offset: 0x1020
+    access: R/W
+    reset: 0x00000000
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_COMP（0x20）"
+    brief: 定时器 2 比较值，同 T0_COMP
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:102"]
+
+  # ---------------------------------------------------------------- T3
+  - name: T3_COUNT
+    addr: 0x10001800
+    offset: 0x1800
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_COUNT（0x00）"
+    brief: 定时器 3 计数值，同 T0_COUNT
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:104"]
+  - name: T3_MODE
+    addr: 0x10001810
+    offset: 0x1810
+    access: R/W
+    reset: 0x00000000
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_MODE（0x10）"
+    brief: 定时器 3 模式与状态，同 T0_MODE（EE 内核报警功能占用）
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:105"]
+  - name: T3_COMP
+    addr: 0x10001820
+    offset: 0x1820
+    access: R/W
+    reset: 0x00000000
+    nodetail: true
+    check: "通道地址 = 基址 + n × PS2_TIMER_STRIDE（0x800）+ PS2_TIMER_COMP（0x20）"
+    brief: 定时器 3 比较值，同 T0_COMP
+    source: ["QEMU hw/timer/ps2_timer.c", "PCSX2 pcsx2/Hw.h:106"]

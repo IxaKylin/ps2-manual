@@ -1,0 +1,60 @@
+# GIFtag：GIF 数据包中每个图元（primitive）之前的 128 位标签。GIFtag 位于数据流中，
+# 没有总线地址。格式说明见 docs/data/SCHEMA.md。PACKED 模式的寄存器描述符与数据格式
+# 写在第 8 章正文中（8.4 节）。
+block: giftag
+title: GIF 数据包标签 GIFtag
+page: /chapters/08-gif
+bus: 数据流中的数据结构（PATH1/PATH2/PATH3）
+width: 128
+status: verified
+qemu:
+  files: [hw/display/ps2_gs.c, hw/display/ps2_vu1.c]
+registers:
+  - name: GIFtag
+    width: 128
+    check: "数据结构，没有总线地址"
+    brief: GIF 数据包标签（每个图元一个）
+    desc: >-
+      GIF 数据包由一个或多个图元组成，每个图元以一个 GIFtag 开头，后面跟随该图元的数据。
+      GIFtag 给出数据格式（FLG）、循环次数（NLOOP）、每次循环写入的寄存器个数（NREG）
+      以及各寄存器描述符（REGS）。低 64 位为控制信息，高 64 位为最多 16 个 4 位寄存器描述符。
+      GIFtag 及其后的数据都按四字对齐。
+    fields:
+      - name: NLOOP
+        bits: "14:0"
+        desc: >-
+          循环次数。PACKED 与 REGLIST 模式下，REGS 中的前 NREG 个描述符依次处理一遍为一次循环；
+          IMAGE 模式下为数据的四字数。NLOOP = 0 时 GIF 不输出任何数据，除 EOP 外其他位域都被忽略，
+          下一个四字仍作为 GIFtag 处理。
+      - name: EOP
+        bits: "15"
+        desc: 数据包结束（End Of Packet）。为 1 表示本图元是数据包的最后一个图元；GIF 在数据包之间进行 PATH 仲裁，PATH1 的 XGKICK 依据 EOP 确定传送范围
+        values: { "0": "后面还有图元", "1": "数据包结束" }
+      - { bits: "45:16", name: 保留, desc: 未使用，写 0 }
+      - name: PRE
+        bits: "46"
+        desc: PRIM 位域允许。为 1 时，GIF 在处理数据之前把 PRIM 位域写入 GS 的 PRIM 寄存器。只在 PACKED 模式下有效
+        values: { "0": "忽略 PRIM 位域", "1": "把 PRIM 写入 GS PRIM 寄存器" }
+      - { bits: "57:47", name: PRIM, desc: PRE = 1 时写入 GS PRIM 寄存器的值（图元类型与属性，见第 9 章） }
+      - name: FLG
+        bits: "59:58"
+        desc: 数据格式
+        values: { "0": "PACKED：每个寄存器占一个四字", "1": "REGLIST：每个寄存器占一个双字，一个四字装两个", "2": "IMAGE：数据直接送往 GS HWREG（图像传输）", "3": "按 IMAGE 处理（ps2tek、PCSX2、QEMU 均如此）" }
+      - name: NREG
+        bits: "63:60"
+        desc: 每次循环使用的寄存器描述符个数，0 表示 16 个。IMAGE 模式下不使用
+      - name: REGS
+        bits: "127:64"
+        desc: >-
+          寄存器描述符，每 4 位一个，最多 16 个：第 67:64 位为第 1 个（REGS0），第 71:68 位为第 2 个（REGS1），
+          依此类推，第 127:124 位为 REGS15。每次循环从 REGS0 开始依次使用前 NREG 个。
+          PACKED 模式下描述符的取值与数据格式见 8.4 节；REGLIST 模式下描述符直接是 GS 寄存器地址 0x0–0xF。
+    ops:
+      - 数据长度（不含 GIFtag，单位为四字）：PACKED 为 NLOOP × NREG；REGLIST 为 ⌈NLOOP × NREG / 2⌉；IMAGE 为 NLOOP。
+      - 只含一个 A+D 描述符的 PACKED GIFtag 低 64 位为 (EOP << 15) | (1 << 60) | NLOOP，高 64 位为 0xE。
+    notes:
+      - 读入每个 GIFtag 时，GS 的 Q 值被置为 1.0。QEMU 在读入任何 GIFtag 时都这样做；PCSX2 只在 NLOOP 不为 0 时这样做（pcsx2/GS/GSState.cpp:3374–3376）。
+      - QEMU 的 GIF 数据包解析器不使用 EOP，只按 NLOOP 判断图元结束；EOP 只在 PATH1（XGKICK）计算传送长度时使用。
+      - QEMU 中 PRE 只在 PACKED 模式下有效，与 PCSX2（pcsx2/GS/GSState.cpp:3380）一致。
+      - QEMU 中 XGKICK 从 VU1 数据存储器读出的数据包总长度（含各 GIFtag，直到 EOP）达到 1024 个四字时，整个 XGKICK 被丢弃并记录 LOG_GUEST_ERROR。
+    source: ["PCSX2 pcsx2/Gif_Unit.h:27（Gif_Tag）", "PCSX2 pcsx2/Gif_Unit.h:83–101（数据长度）", "PCSX2 pcsx2/GS/GSRegs.h:133（GIF_FLG）", "ps2tek §GIFtags", "QEMU hw/display/ps2_gs.c（ps2_gs_gif_qword）", "QEMU hw/display/ps2_vu1.c（vu1_gif_tag）"]

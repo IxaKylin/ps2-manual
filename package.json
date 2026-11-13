@@ -1,0 +1,18 @@
+{
+  "name": "ps2-manual",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "node scripts/gen-memmap.mjs && node scripts/gen-index.mjs",
+    "check": "node scripts/check-addr.mjs && node scripts/check-zh.mjs",
+    "docs:dev": "npm run gen && vitepress dev docs",
+    "docs:build": "npm run gen && vitepress build docs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "js-yaml": "4.1.0",
+    "medium-zoom": "^1.1.2",
+    "opencc-js": "1.0.5",
+    "vitepress": "1.6.4"
+  }
+}

@@ -1,0 +1,717 @@
+# GS 一般寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# 一般寄存器没有总线地址，只能经 GIF 写入（PACKED 模式的寄存器描述符、A+D 或 REGLIST），
+# offset 为 GS 寄存器地址（A+D 写法中高 64 位的第 7:0 位），与 QEMU hw/display/ps2_gs.c
+# 中的 GS_xxx 常量一致。成对的上下文寄存器（_1/_2）只详细说明 _1。
+block: gs-gen
+title: GS 一般寄存器
+page: /chapters/09-gs
+bus: GS 内部
+access_size: 64 位，经 GIF 写入；不可读
+width: 64
+status: verified
+qemu:
+  files: [include/hw/display/ps2_gs.h, hw/display/ps2_gs.c]
+registers:
+  - name: PRIM
+    offset: 0x00
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_PRIM）"
+    brief: 图元类型与属性；写入时清空顶点队列
+    desc: >-
+      选择要绘制的图元类型及其属性（着色、纹理、雾化、α 混合、坐标形式、上下文）。写 PRIM 会清空顶点队列，
+      此后按新类型重新累计顶点。PRMODECONT.AC = 0 时属性位（第 10:3 位）改由 PRMODE 提供，此时只使用
+      PRIM 的类型位。GIFtag 的 PRE = 1 时，GIF 在处理标签时把标签中的 PRIM 位域写入本寄存器。
+    fields:
+      - name: PRIM
+        bits: "2:0"
+        reset: 0
+        desc: 图元类型，见表 9-2
+        values: { "0": "点", "1": "线段", "2": "折线", "3": "三角形", "4": "三角形条带", "5": "三角形扇", "6": "精灵（轴对齐矩形）", "7": "保留" }
+      - { bits: "3", name: IIP, reset: 0, desc: "着色方式：0 = 平面着色（取最后一个顶点的颜色），1 = Gouraud 着色（颜色插值）" }
+      - { bits: "4", name: TME, reset: 0, desc: "1 = 纹理映射" }
+      - { bits: "5", name: FGE, reset: 0, desc: "1 = 雾化" }
+      - { bits: "6", name: ABE, reset: 0, desc: "1 = α 混合" }
+      - { bits: "7", name: AA1, reset: 0, status: unimplemented, desc: "1 = 单遍抗锯齿。QEMU 忽略" }
+      - { bits: "8", name: FST, reset: 0, desc: "纹理坐标：0 = STQ（浮点，透视校正），1 = UV（定点纹素坐标）" }
+      - { bits: "9", name: CTXT, reset: 0, desc: "绘图上下文：0 = 上下文 1，1 = 上下文 2" }
+      - { bits: "10", name: FIX, reset: 0, status: unimplemented, desc: "片元值控制（与抗锯齿有关），QEMU 忽略" }
+    notes:
+      - QEMU 中类型 7 的顶点被丢弃并记录 LOG_GUEST_ERROR。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_context、ps2_gs_vertex_kick）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:705（GIFRegPRIM）"
+      - "ps2tek §GS Primitives"
+
+  - name: RGBAQ
+    offset: 0x01
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_RGBAQ）"
+    brief: 顶点颜色与纹理坐标 Q
+    desc: >-
+      下一个顶点的颜色与 STQ 坐标中的 Q。顶点踢出时 RGBAQ 的当前值随顶点进入队列。PACKED 模式的 RGBAQ
+      描述符每个分量占 32 位中的低 8 位，Q 取自同一 GIF 数据包中最近一次 ST 描述符的高 32 位（每个 GIFtag 开始时为 1.0）。
+    fields:
+      - { bits: "7:0", name: R, reset: 0, desc: 红色 }
+      - { bits: "15:8", name: G, reset: 0, desc: 绿色 }
+      - { bits: "23:16", name: B, reset: 0, desc: 蓝色 }
+      - { bits: "31:24", name: A, reset: 0, desc: "α，0x80 表示 1.0" }
+      - { bits: "63:32", name: Q, reset: 0, desc: "纹理坐标 Q（单精度浮点）" }
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_write_packed、ps2_gs_vertex）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:739（GIFRegRGBAQ）"
+      - "ps2tek §GS Vertex Attributes"
+
+  - name: ST
+    offset: 0x02
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_ST）"
+    brief: 纹理坐标 S、T（单精度浮点）
+    desc: 第 31:0 位为 S，第 63:32 位为 T。FST = 0 时纹素坐标 U = S/Q × 纹理宽度，V = T/Q × 纹理高度。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_vertex）", "PCSX2 pcsx2/GS/GSRegs.h:769", "ps2tek §GS Textures"]
+
+  - name: UV
+    offset: 0x03
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_UV）"
+    brief: 纹素坐标 U、V（定点，4 位小数）
+    desc: 第 13:0 位为 U，第 29:16 位为 V，均为 10 位整数 + 4 位小数的无符号定点数。FST = 1 时使用。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_vertex）", "PCSX2 pcsx2/GS/GSRegs.h:921", "ps2tek §GS Vertex Attributes"]
+
+  - name: XYZF2
+    offset: 0x04
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_XYZF2）"
+    brief: 顶点坐标（24 位 Z）与雾化系数，踢出顶点并可触发绘制
+    desc: >-
+      与 XYZ2 相同，但 Z 只有 24 位（第 55:32 位），第 63:56 位为雾化系数 F，写入时同时更新 FOG 寄存器。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg）", "PCSX2 pcsx2/GS/GSRegs.h:942", "ps2tek §GS Vertex Attributes"]
+
+  - name: XYZ2
+    offset: 0x05
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_XYZ2）"
+    brief: 顶点坐标（32 位 Z），踢出顶点并可触发绘制
+    desc: >-
+      写入时把一个顶点（坐标及 RGBAQ、ST、UV、FOG 的当前值）放入顶点队列，称为顶点踢出（vertex kick）。
+      队列中的顶点数达到图元所需（点 1 个，线与精灵 2 个，三角形 3 个）时开始绘制，称为绘制踢出（drawing kick）。
+      X、Y 为原始坐标（图元坐标系），减去 XYOFFSET 得到窗口坐标；顶点进入队列时做这一减法。
+    fields:
+      - { bits: "15:0", name: X, reset: 0, desc: "X 坐标，12 位整数 + 4 位小数" }
+      - { bits: "31:16", name: Y, reset: 0, desc: "Y 坐标，12 位整数 + 4 位小数" }
+      - { bits: "63:32", name: Z, reset: 0, desc: "深度值，32 位无符号整数" }
+    notes:
+      - XYZ3 / XYZF3 与 XYZ2 / XYZF2 一样踢出顶点、维护条带与扇形的队列，但不触发绘制，可用于跳过（剔除）条带中的某个三角形。
+      - PACKED 模式的 XYZ2 / XYZF2 描述符中，若高 64 位的第 47 位（ADC）为 1，按 XYZ3 / XYZF3 处理。
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_write_reg、ps2_gs_vertex_kick、ps2_gs_write_packed）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:936（GIFRegXYZ）"
+      - "ps2tek §GS Vertex Attributes"
+
+  - name: TEX0_1
+    offset: 0x06
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TEX0_1）"
+    brief: 上下文 1 纹理设置：纹理缓冲、格式、大小、纹理函数、CLUT
+    desc: >-
+      描述纹理图像（起始地址、缓冲宽度、像素格式、宽高）、纹理函数，以及索引色纹理所用的颜色查找表（CLUT）。
+      TEX0_2（0x07）为上下文 2 的同名寄存器。
+    fields:
+      - { bits: "13:0", name: TBP0, reset: 0, desc: "纹理起始地址，单位为块（64 字 = 256 字节）" }
+      - { bits: "19:14", name: TBW, reset: 0, desc: "纹理缓冲宽度，单位为 64 像素" }
+      - { bits: "25:20", name: PSM, reset: 0, desc: "纹理像素格式，见表 9-4" }
+      - { bits: "29:26", name: TW, reset: 0, desc: "纹理宽度 = 2^TW，最大 1024" }
+      - { bits: "33:30", name: TH, reset: 0, desc: "纹理高度 = 2^TH，最大 1024" }
+      - name: TCC
+        bits: "34"
+        reset: 0
+        desc: 颜色分量
+        values: { "0": "RGB：α 取片元的 α", "1": "RGBA：α 参与纹理函数" }
+      - name: TFX
+        bits: "36:35"
+        reset: 0
+        desc: 纹理函数，见 9.5 节
+        values: { "0": "MODULATE", "1": "DECAL", "2": "HIGHLIGHT", "3": "HIGHLIGHT2" }
+      - { bits: "50:37", name: CBP, reset: 0, desc: "CLUT 起始地址，单位为块" }
+      - name: CPSM
+        bits: "54:51"
+        reset: 0
+        desc: CLUT 像素格式
+        values: { "0x0": "PSMCT32", "0x2": "PSMCT16", "0xA": "PSMCT16S" }
+      - name: CSM
+        bits: "55"
+        reset: 0
+        status: unimplemented
+        desc: CLUT 存储方式。QEMU 只支持 CSM1；CSM = 1（CSM2）时记录 LOG_UNIMP 后仍按 CSM1 的排列读取 CLUT（hw/display/ps2_gs.c 的 ps2_gs_clut）
+        values: { "0": "CSM1", "1": "CSM2" }
+      - { bits: "60:56", name: CSA, reset: 0, desc: "CLUT 起始项偏移，单位为 16 项（只用于 4 位索引纹理）" }
+      - { bits: "63:61", name: CLD, reset: 0, status: unimplemented, desc: "CLUT 缓冲装载控制（0 = 不装载，1–5 为各种装载条件）。QEMU 没有 CLUT 缓冲，每次查表都直接读本地存储器，CLD 无效" }
+    source:
+      - "QEMU hw/display/ps2_gs.c（ps2_gs_texel、ps2_gs_clut、ps2_gs_texture_function）"
+      - "PCSX2 pcsx2/GS/GSRegs.h:789（GIFRegTEX0）"
+      - "ps2tek §GS Textures"
+
+  - name: TEX0_2
+    offset: 0x07
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_TEX0_1 + 1"
+    brief: 上下文 2 纹理设置，格式同 TEX0_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）", "ps2tek §GS Register List"]
+
+  - name: CLAMP_1
+    offset: 0x08
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_CLAMP_1）"
+    brief: 上下文 1 纹理坐标回绕方式
+    desc: 纹素坐标超出纹理范围时的处理方式，水平（WMS）与垂直（WMT）分别设定。CLAMP_2（0x09）为上下文 2 的同名寄存器。
+    fields:
+      - name: WMS
+        bits: "1:0"
+        reset: 0
+        desc: 水平方向回绕方式
+        values: { "0": "REPEAT：按纹理宽度重复", "1": "CLAMP：钳位到 [0, 宽度 − 1]", "2": "REGION_CLAMP：钳位到 [MINU, MAXU]", "3": "REGION_REPEAT：U = (U & MINU) | MAXU" }
+      - { bits: "3:2", name: WMT, reset: 0, desc: "垂直方向回绕方式，取值同 WMS" }
+      - { bits: "13:4", name: MINU, reset: 0, desc: "U 下限，REGION_REPEAT 时为掩码" }
+      - { bits: "23:14", name: MAXU, reset: 0, desc: "U 上限，REGION_REPEAT 时为偏移" }
+      - { bits: "33:24", name: MINV, reset: 0, desc: "V 下限 / 掩码" }
+      - { bits: "43:34", name: MAXV, reset: 0, desc: "V 上限 / 偏移" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_wrap、ps2_gs_texel）", "PCSX2 pcsx2/GS/GSRegs.h:560（GIFRegCLAMP）"]
+
+  - name: CLAMP_2
+    offset: 0x09
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_CLAMP_1 + 1"
+    brief: 上下文 2 纹理坐标回绕方式，格式同 CLAMP_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）", "ps2tek §GS Register List"]
+
+  - name: FOG
+    offset: 0x0A
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_FOG）"
+    status: reference
+    brief: 顶点雾化系数 F（第 63:56 位）
+    desc: 下一个顶点的雾化系数 F 位于第 63:56 位，0xFF 表示无雾，0 表示完全为雾色。写 XYZF2 / XYZF3 时也会更新本寄存器。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_fog、ps2_gs_write_reg）", "PCSX2 pcsx2/GS/GSRegs.h:641", "ps2tek §GS Fog"]
+
+  - name: XYZF3
+    offset: 0x0C
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_XYZF3）"
+    brief: 同 XYZF2，只踢出顶点，不触发绘制
+    desc: 格式同 XYZF2。顶点进入队列，但不绘制图元。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg）", "ps2tek §GS Vertex Attributes"]
+
+  - name: XYZ3
+    offset: 0x0D
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_XYZ3）"
+    brief: 同 XYZ2，只踢出顶点，不触发绘制
+    desc: 格式同 XYZ2。顶点进入队列，但不绘制图元。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg）", "ps2tek §GS Vertex Attributes"]
+
+  - name: TEX1_1
+    offset: 0x14
+    access: WO
+    status: unimplemented
+    reset: "0x0000000000000000"
+    brief: 上下文 1 纹理过滤与 LOD（mipmap）设置
+    desc: >-
+      选择放大 / 缩小过滤方式与 mipmap 级别计算参数。QEMU 只做最近点采样，不计算 LOD，本寄存器只保存。
+      TEX1_2（0x15）为上下文 2 的同名寄存器。
+    fields:
+      - { bits: "0", name: LCM, reset: 0, desc: "LOD 计算方式：0 = 按 Q 计算，1 = 固定值 K" }
+      - { bits: "4:2", name: MXL, reset: 0, desc: "最大 mipmap 级别" }
+      - { bits: "5", name: MMAG, reset: 0, desc: "放大过滤：0 = 最近点，1 = 双线性" }
+      - { bits: "8:6", name: MMIN, reset: 0, desc: "缩小过滤：0 = 最近点，1 = 双线性，2–5 为各种 mipmap 组合" }
+      - { bits: "9", name: MTBA, reset: 0, desc: "1 = 自动计算第 1–3 级 mipmap 地址（0 = 使用 MIPTBP1）" }
+      - { bits: "20:19", name: L, reset: 0, desc: "LOD 参数 L" }
+      - { bits: "43:32", name: K, reset: 0, desc: "LOD 参数 K（有符号定点，4 位小数）" }
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:842（GIFRegTEX1）", "PCSX2 pcsx2/GS/GSRegs.h:213（GS_MIN_FILTER）", "PCSX2 pcsx2/GS/GSUtil.cpp:143（LCM）", "ps2tek §GS Textures"]
+
+  - name: TEX1_2
+    offset: 0x15
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: 上下文 2 纹理过滤与 LOD 设置，格式同 TEX1_1
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:842", "ps2tek §GS Register List"]
+
+  - name: TEX2_1
+    offset: 0x16
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TEX2_1）"
+    brief: 只改写 TEX0_1 的 PSM 与 CLUT 位域
+    desc: >-
+      TEX0 的子集：写入时只把 PSM（第 25:20 位）和 CBP、CPSM、CSM、CSA、CLD（第 63:37 位）复制到 TEX0_1，
+      纹理地址、宽度与纹理函数保持不变，用于在同一纹理上切换调色板。TEX2_2（0x17）对 TEX0_2 作同样操作。
+    fields:
+      - { bits: "25:20", name: PSM, reset: 0, desc: "纹理像素格式" }
+      - { bits: "50:37", name: CBP, reset: 0, desc: "CLUT 起始地址" }
+      - { bits: "54:51", name: CPSM, reset: 0, desc: "CLUT 像素格式" }
+      - { bits: "55", name: CSM, reset: 0, desc: "CLUT 存储方式" }
+      - { bits: "60:56", name: CSA, reset: 0, desc: "CLUT 起始项偏移" }
+      - { bits: "63:61", name: CLD, reset: 0, status: unimplemented, desc: "CLUT 缓冲装载控制（QEMU 中无效）" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_TEX2_1）", "PCSX2 pcsx2/GS/GSRegs.h:859（GIFRegTEX2）", "ps2tek §GS Textures"]
+
+  - name: TEX2_2
+    offset: 0x17
+    access: WO
+    nodetail: true
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TEX2_2）"
+    brief: 只改写 TEX0_2 的 PSM 与 CLUT 位域，格式同 TEX2_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_TEX2_2）"]
+
+  - name: XYOFFSET_1
+    offset: 0x18
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_XYOFFSET_1）"
+    brief: 上下文 1 原始坐标到窗口坐标的偏移
+    desc: >-
+      顶点的 X、Y（原始坐标，12.4 定点）减去 OFX、OFY 得到窗口坐标。通常把 2048 × 2048 原始坐标空间的中心
+      对准画面中心，例如 OFX = (2048 − 320) × 16。XYOFFSET_2（0x19）为上下文 2 的同名寄存器。
+    fields:
+      - { bits: "15:0", name: OFX, reset: 0, desc: "X 偏移，12 位整数 + 4 位小数" }
+      - { bits: "47:32", name: OFY, reset: 0, desc: "Y 偏移，12 位整数 + 4 位小数" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context、ps2_gs_vertex）", "PCSX2 pcsx2/GS/GSRegs.h:931", "ps2tek §GS Vertex Attributes"]
+
+  - name: XYOFFSET_2
+    offset: 0x19
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_XYOFFSET_1 + 1"
+    brief: 上下文 2 坐标偏移，格式同 XYOFFSET_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）"]
+
+  - name: PRMODECONT
+    offset: 0x1A
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_PRMODECONT）"
+    status: reference
+    brief: 图元属性来源选择（PRIM 或 PRMODE）
+    desc: 第 0 位 AC：1 = 图元属性取自 PRIM，0 = 取自 PRMODE。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+      - QEMU 复位后为 0（属性取自 PRMODE），PCSX2 初始化为 1。程序应在初始化绘图环境时显式写 PRMODECONT = 1。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context、ps2_gs_reset_hold）", "PCSX2 pcsx2/GS/GSRegs.h:733", "PCSX2 pcsx2/GS/GSState.cpp:115"]
+
+  - name: PRMODE
+    offset: 0x1B
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_PRMODE）"
+    brief: 图元属性（PRMODECONT.AC = 0 时使用）
+    desc: 第 10:3 位与 PRIM 相同，第 2:0 位不使用。写 PRMODE 不清空顶点队列，可在同一类型图元之间切换属性。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）", "PCSX2 pcsx2/GS/GSRegs.h:719", "ps2tek §GS Primitives"]
+
+  - name: TEXCLUT
+    offset: 0x1C
+    access: WO
+    status: unimplemented
+    brief: CSM2 方式下 CLUT 在缓冲中的位置
+    desc: CBW（第 5:0 位，缓冲宽度 / 64）、COU（第 11:6 位，X 偏移 / 16）、COV（第 21:12 位，Y 偏移）。只用于 CSM2，QEMU 不支持 CSM2，只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:880（GIFRegTEXCLUT）", "PCSX2 pcsx2/GS/GSClut.cpp:265"]
+
+  - name: SCANMSK
+    offset: 0x22
+    access: WO
+    status: unimplemented
+    brief: 按奇偶行屏蔽绘制
+    desc: MSK（第 1:0 位）：0 = 不屏蔽，1 = 保留，2 = 不绘制偶数行，3 = 不绘制奇数行。QEMU 只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:747（GIFRegSCANMSK）", "PCSX2 pcsx2/GS/GSUtil.cpp:149"]
+
+  - name: MIPTBP1_1
+    offset: 0x34
+    access: WO
+    status: unimplemented
+    brief: 上下文 1 mipmap 第 1–3 级纹理地址与宽度
+    desc: TBP1/TBW1、TBP2/TBW2、TBP3/TBW3 依次占第 19:0、39:20、59:40 位（每组 14 位地址 + 6 位宽度）。QEMU 不支持 mipmap，只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:675（GIFRegMIPTBP1）"]
+
+  - name: MIPTBP1_2
+    offset: 0x35
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: 上下文 2 mipmap 第 1–3 级，格式同 MIPTBP1_1
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:675", "ps2tek §GS Register List"]
+
+  - name: MIPTBP2_1
+    offset: 0x36
+    access: WO
+    status: unimplemented
+    brief: 上下文 1 mipmap 第 4–6 级纹理地址与宽度
+    desc: 格式同 MIPTBP1_1，对应第 4、5、6 级。QEMU 只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:685（GIFRegMIPTBP2）"]
+
+  - name: MIPTBP2_2
+    offset: 0x37
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: 上下文 2 mipmap 第 4–6 级，格式同 MIPTBP2_1
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:685", "ps2tek §GS Register List"]
+
+  - name: TEXA
+    offset: 0x3B
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TEXA）"
+    status: reference
+    brief: 16 / 24 位纹理展开为 RGBA32 时的 α 值
+    desc: >-
+      TA0（第 7:0 位）：PSMCT24 纹素及最高位为 0 的 PSMCT16 纹素的 α；AEM（第 15 位）：为 1 时 RGB 全 0 的纹素 α 取 0；
+      TA1（第 39:32 位）：最高位为 1 的 PSMCT16 纹素的 α。CLUT 项为 16 位格式时同样适用。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_to_rgba）", "PCSX2 pcsx2/GS/GSRegs.h:871（GIFRegTEXA）"]
+
+  - name: FOGCOL
+    offset: 0x3D
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_FOGCOL）"
+    status: reference
+    brief: 雾颜色
+    desc: FCR（第 7:0 位）、FCG（第 15:8 位）、FCB（第 23:16 位）。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_fog）", "PCSX2 pcsx2/GS/GSRegs.h:646", "ps2tek §GS Fog"]
+
+  - name: TEXFLUSH
+    offset: 0x3F
+    access: WO
+    status: unimplemented
+    brief: 使纹理缓存失效
+    desc: 写入任意值使纹理缓存失效。更新纹理或 CLUT 数据后、把帧缓冲当作纹理之前应写本寄存器。QEMU 没有纹理缓存，写入只保存，不影响结果。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:888", "ps2tek §GS Textures"]
+
+  - name: SCISSOR_1
+    offset: 0x40
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_SCISSOR_1）"
+    brief: 上下文 1 裁剪矩形（窗口坐标）
+    desc: >-
+      窗口坐标中的裁剪矩形，边界包含在内；矩形外的像素不进入像素流水线。SCISSOR_2（0x41）为上下文 2 的同名寄存器。
+    fields:
+      - { bits: "10:0", name: SCAX0, reset: 0, desc: "左边界 X" }
+      - { bits: "26:16", name: SCAX1, reset: 0, desc: "右边界 X（含）" }
+      - { bits: "42:32", name: SCAY0, reset: 0, desc: "上边界 Y" }
+      - { bits: "58:48", name: SCAY1, reset: 0, desc: "下边界 Y（含）" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context、ps2_gs_clip）", "PCSX2 pcsx2/GS/GSRegs.h:753", "ps2tek §GS Tests and Pixel Control"]
+
+  - name: SCISSOR_2
+    offset: 0x41
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_SCISSOR_1 + 1"
+    brief: 上下文 2 裁剪矩形，格式同 SCISSOR_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）"]
+
+  - name: ALPHA_1
+    offset: 0x42
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_ALPHA_1）"
+    brief: 上下文 1 α 混合公式选择
+    desc: >-
+      α 混合公式为 Cv = ((A − B) × C >> 7) + D，A、B、D 为颜色，C 为 α 值。Cs 为源（片元）颜色，Cd 为帧缓冲中的颜色。
+      ALPHA_2（0x43）为上下文 2 的同名寄存器。
+    fields:
+      - name: A
+        bits: "1:0"
+        reset: 0
+        desc: 被减数颜色
+        values: { "0": "Cs", "1": "Cd", "2": "0", "3": "保留" }
+      - { bits: "3:2", name: B, reset: 0, desc: "减数颜色，取值同 A" }
+      - name: C
+        bits: "5:4"
+        reset: 0
+        desc: 系数 α
+        values: { "0": "As（源 α）", "1": "Ad（帧缓冲 α）", "2": "FIX", "3": "保留" }
+      - { bits: "7:6", name: D, reset: 0, desc: "加数颜色，取值同 A" }
+      - { bits: "39:32", name: FIX, reset: 0, desc: "C = 2 时使用的固定 α 值，0x80 表示 1.0" }
+    notes:
+      - ps2tek 把 FIX 写在第 15:8 位；PCSX2 与 QEMU 均为第 39:32 位，本手册按后者。
+      - QEMU 中取值 3 按 2 处理。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_blend）", "PCSX2 pcsx2/GS/GSRegs.h:521（GIFRegALPHA）", "ps2tek §GS Alpha Blending"]
+
+  - name: ALPHA_2
+    offset: 0x43
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_ALPHA_1 + 1"
+    brief: 上下文 2 α 混合公式选择，格式同 ALPHA_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）"]
+
+  - name: DIMX
+    offset: 0x44
+    access: WO
+    status: unimplemented
+    brief: 4 × 4 抖动矩阵
+    desc: 16 个 3 位有符号抖动值 DMxy，每个占 4 位（第 2:0 位有效）。DTHE = 1 时按像素位置加到颜色上。QEMU 只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:590（GIFRegDIMX）", "PCSX2 pcsx2/GS/Renderers/SW/GSDrawScanline.cpp:1580"]
+
+  - name: DTHE
+    offset: 0x45
+    access: WO
+    status: unimplemented
+    brief: 抖动允许
+    desc: 第 0 位 DTHE：1 = 写入 PSMCT16 帧缓冲时按 DIMX 抖动。QEMU 不做抖动，只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:625（GIFRegDTHE）", "PCSX2 pcsx2/GS/Renderers/SW/GSDrawScanline.cpp:1580"]
+
+  - name: COLCLAMP
+    offset: 0x46
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_COLCLAMP）"
+    status: reference
+    brief: α 混合结果的钳位方式
+    desc: 第 0 位 CLAMP：1 = 各颜色分量钳位到 0–255，0 = 只取低 8 位（回绕）。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_blend）", "PCSX2 pcsx2/GS/GSRegs.h:584", "ps2tek §GS Alpha Blending"]
+
+  - name: TEST_1
+    offset: 0x47
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TEST_1）"
+    brief: 上下文 1 像素测试：α 测试、目的 α 测试、深度测试
+    desc: TEST_2（0x48）为上下文 2 的同名寄存器。各测试的顺序见 9.6 节。
+    fields:
+      - { bits: "0", name: ATE, reset: 0, desc: "1 = α 测试允许" }
+      - name: ATST
+        bits: "3:1"
+        reset: 0
+        desc: α 测试方式（片元 α 与 AREF 比较，满足条件为通过）
+        values: { "0": "NEVER", "1": "ALWAYS", "2": "LESS（<）", "3": "LEQUAL（≤）", "4": "EQUAL（=）", "5": "GEQUAL（≥）", "6": "GREATER（>）", "7": "NOTEQUAL（≠）" }
+      - { bits: "11:4", name: AREF, reset: 0, desc: "α 参考值" }
+      - name: AFAIL
+        bits: "13:12"
+        reset: 0
+        desc: α 测试失败时的处理
+        values: { "0": "KEEP：帧缓冲与 Z 缓冲都不更新", "1": "FB_ONLY：只更新帧缓冲", "2": "ZB_ONLY：只更新 Z 缓冲", "3": "RGB_ONLY：只更新帧缓冲的 RGB" }
+      - { bits: "14", name: DATE, reset: 0, desc: "1 = 目的 α 测试允许" }
+      - { bits: "15", name: DATM, reset: 0, desc: "目的 α 测试方式：0 = 帧缓冲像素 α 最高位为 0 的通过，1 = 为 1 的通过" }
+      - { bits: "16", name: ZTE, reset: 0, desc: "1 = 深度测试允许。QEMU 中 ZTE = 0 时既不测试也不写 Z 缓冲" }
+      - name: ZTST
+        bits: "18:17"
+        reset: 0
+        desc: 深度测试方式
+        values: { "0": "NEVER", "1": "ALWAYS", "2": "GEQUAL（Z ≥ Z 缓冲）", "3": "GREATER（Z > Z 缓冲）" }
+    notes:
+      - GS 的深度比较是“大者在前”，清 Z 缓冲时写 0。
+      - PCSX2 在帧缓冲不是 32 位格式（FRAME.PSM 低 4 位不为 0，如 PSMCT24、PSMCT16）时把 AFAIL = 3（RGB_ONLY）按 1（FB_ONLY）处理（pcsx2/GS/GSRegs.h:786，GetAFAIL）；QEMU 不做这一转换。
+      - ps2tek 注明 ZTE = 0 可能属于禁止用法（原文带问号）；需要关闭深度测试时，稳妥的写法是 ZTE = 1、ZTST = 1（ALWAYS）。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_fragment、ps2_gs_alpha_test）", "PCSX2 pcsx2/GS/GSRegs.h:774（GIFRegTEST）", "PCSX2 pcsx2/GS/GSRegs.h:176（GS_ZTST）", "ps2tek §GS Tests and Pixel Control"]
+
+  - name: TEST_2
+    offset: 0x48
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_TEST_1 + 1"
+    brief: 上下文 2 像素测试，格式同 TEST_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）"]
+
+  - name: PABE
+    offset: 0x49
+    access: WO
+    status: unimplemented
+    brief: 按像素 α 控制 α 混合
+    desc: 第 0 位 PABE：1 = 源 α 最高位为 0 的像素不做 α 混合。QEMU 只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:699（GIFRegPABE）", "PCSX2 pcsx2/GS/Renderers/SW/GSDrawScanline.cpp:1518"]
+
+  - name: FBA_1
+    offset: 0x4A
+    access: WO
+    status: unimplemented
+    brief: 上下文 1 写入帧缓冲时 α 最高位强制置 1
+    desc: 第 0 位 FBA：1 = 写入帧缓冲前把 α 的最高位置 1（PSMCT24 无 α，不受影响）。FBA_2（0x4B）为上下文 2 的同名寄存器。QEMU 只保存。
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:631（GIFRegFBA）", "PCSX2 pcsx2/GS/Renderers/SW/GSDrawScanline.cpp:1596"]
+
+  - name: FBA_2
+    offset: 0x4B
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: 上下文 2 α 最高位强制置 1，格式同 FBA_1
+    source: ["PCSX2 pcsx2/GS/GSRegs.h:631", "ps2tek §GS Register List"]
+
+  - name: FRAME_1
+    offset: 0x4C
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_FRAME_1）"
+    brief: 上下文 1 帧缓冲设置
+    desc: 绘图目标帧缓冲的地址、宽度、格式与写屏蔽。FRAME_2（0x4D）为上下文 2 的同名寄存器。
+    fields:
+      - { bits: "8:0", name: FBP, reset: 0, desc: "帧缓冲起始地址，单位为页（2048 字 = 8 KB）" }
+      - { bits: "21:16", name: FBW, reset: 0, desc: "缓冲宽度，单位为 64 像素。Z 缓冲使用同一宽度" }
+      - name: PSM
+        bits: "29:24"
+        reset: 0
+        desc: 帧缓冲像素格式
+        values: { "0x00": "PSMCT32", "0x01": "PSMCT24", "0x02": "PSMCT16", "0x0A": "PSMCT16S", "0x30": "PSMZ32", "0x31": "PSMZ24", "0x32": "PSMZ16", "0x3A": "PSMZ16S" }
+      - { bits: "63:32", name: FBMSK, reset: 0, desc: "写屏蔽，为 1 的位不更新（按 RGBA32 位置给出，16 位格式时取对应分量的高位）" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context、ps2_gs_fragment）", "PCSX2 pcsx2/GS/GSRegs.h:653（GIFRegFRAME）", "ps2tek §GS Frame and Z Buffers"]
+
+  - name: FRAME_2
+    offset: 0x4D
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_FRAME_1 + 1"
+    brief: 上下文 2 帧缓冲设置，格式同 FRAME_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）"]
+
+  - name: ZBUF_1
+    offset: 0x4E
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_ZBUF_1）"
+    brief: 上下文 1 Z 缓冲设置
+    desc: Z 缓冲的地址、格式与写屏蔽，宽度与 FRAME 相同。ZBUF_2（0x4F）为上下文 2 的同名寄存器。
+    fields:
+      - { bits: "8:0", name: ZBP, reset: 0, desc: "Z 缓冲起始地址，单位为页" }
+      - name: PSM
+        bits: "27:24"
+        reset: 0
+        desc: Z 格式（PSMZ 编码的低 4 位）
+        values: { "0x0": "PSMZ32", "0x1": "PSMZ24", "0x2": "PSMZ16", "0xA": "PSMZ16S" }
+      - { bits: "32", name: ZMSK, reset: 0, desc: "1 = 不更新 Z 缓冲（只测试）" }
+    notes:
+      - 写入 Z 缓冲前，QEMU 把 Z 钳位到格式能表示的最大值（PSMZ24 为 0xFFFFFF，PSMZ16/16S 为 0xFFFF）。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context、ps2_gs_z_max）", "PCSX2 pcsx2/GS/GSRegs.h:949（GIFRegZBUF）", "ps2tek §GS Frame and Z Buffers"]
+
+  - name: ZBUF_2
+    offset: 0x4F
+    access: WO
+    reset: "0x0000000000000000"
+    nodetail: true
+    check: "GS 一般寄存器无总线地址；GS_ZBUF_1 + 1"
+    brief: 上下文 2 Z 缓冲设置，格式同 ZBUF_1
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_context）"]
+
+  - name: BITBLTBUF
+    offset: 0x50
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_BITBLTBUF）"
+    brief: 传输的源 / 目的缓冲设置
+    desc: >-
+      主机 ↔ 本地、本地 → 本地传输的缓冲。主机 → 本地只用目的部分，本地 → 主机只用源部分，
+      本地 → 本地两者都用，且源与目的格式的每像素位数必须相同。
+    fields:
+      - { bits: "13:0", name: SBP, reset: 0, desc: "源缓冲起始地址，单位为块（64 字 = 256 字节）" }
+      - { bits: "21:16", name: SBW, reset: 0, desc: "源缓冲宽度，单位为 64 像素" }
+      - { bits: "29:24", name: SPSM, reset: 0, desc: "源像素格式，见表 9-4" }
+      - { bits: "45:32", name: DBP, reset: 0, desc: "目的缓冲起始地址，单位为块" }
+      - { bits: "53:48", name: DBW, reset: 0, desc: "目的缓冲宽度，单位为 64 像素" }
+      - { bits: "61:56", name: DPSM, reset: 0, desc: "目的像素格式，见表 9-4" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_transfer_pixel、ps2_gs_transfer_local）", "PCSX2 pcsx2/GS/GSRegs.h:545（GIFRegBITBLTBUF）", "ps2tek §GS Transfers"]
+
+  - name: TRXPOS
+    offset: 0x51
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TRXPOS）"
+    brief: 传输矩形左上角与本地 → 本地的传输顺序
+    fields:
+      - { bits: "10:0", name: SSAX, reset: 0, desc: "源矩形左上角 X（像素）" }
+      - { bits: "26:16", name: SSAY, reset: 0, desc: "源矩形左上角 Y" }
+      - { bits: "42:32", name: DSAX, reset: 0, desc: "目的矩形左上角 X" }
+      - { bits: "58:48", name: DSAY, reset: 0, desc: "目的矩形左上角 Y" }
+      - name: DIR
+        bits: "60:59"
+        reset: 0
+        desc: 本地 → 本地传输的像素顺序，用于源与目的区域重叠的情况
+        values: { "0": "左上 → 右下", "1": "左下 → 右上", "2": "右上 → 左下", "3": "右下 → 左上" }
+    notes:
+      - 坐标超过 2047 时按 2048 回绕。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_transfer_local）", "PCSX2 pcsx2/GS/GSRegs.h:899（GIFRegTRXPOS）", "ps2tek §GS Transfers"]
+
+  - name: TRXREG
+    offset: 0x52
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TRXREG）"
+    brief: 传输矩形的宽与高
+    fields:
+      - { bits: "11:0", name: RRW, reset: 0, desc: "宽度（像素）" }
+      - { bits: "43:32", name: RRH, reset: 0, desc: "高度（像素）" }
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_start_transfer）", "PCSX2 pcsx2/GS/GSRegs.h:912", "ps2tek §GS Transfers"]
+
+  - name: TRXDIR
+    offset: 0x53
+    access: WO
+    reset: "0x0000000000000000"
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_TRXDIR）"
+    brief: 传输方向；写入即启动传输
+    desc: 写入时按 BITBLTBUF、TRXPOS、TRXREG 的当前值启动传输，因此必须最后写。
+    fields:
+      - name: XDIR
+        bits: "1:0"
+        reset: 0
+        desc: 传输方向
+        values: { "0": "主机 → 本地（随后经 IMAGE 包或 HWREG 送数据）", "1": "本地 → 主机（经 VIF1 / DMAC 通道 1 读出）", "2": "本地 → 本地（写入时立即完成）", "3": "停止传输" }
+    notes:
+      - QEMU 中格式编码无效、宽或高为 0 时不启动传输；本地 → 本地源与目的每像素位数不同时记录 LOG_GUEST_ERROR 并放弃。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_start_transfer）", "PCSX2 pcsx2/GS/GSRegs.h:893", "ps2tek §GS Transfers"]
+
+  - name: HWREG
+    offset: 0x54
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_HWREG）"
+    status: reference
+    brief: 主机 → 本地传输的数据端口
+    desc: 主机 → 本地传输进行中时，每次写入的 64 位按目的格式拆成像素依次写入本地存储器。IMAGE 模式 GIF 数据包是写 HWREG 的快捷方式。没有进行中的传输时写入被忽略。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_HWREG）", "PCSX2 pcsx2/GS/GSRegs.h:665", "ps2tek §GS Transfers"]
+
+  - name: SIGNAL
+    offset: 0x60
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_SIGNAL）"
+    brief: 更新 SIGLBLID.SIGID 并产生 SIGNAL 事件
+    desc: 第 31:0 位 ID，第 63:32 位 IDMSK。SIGID = (SIGID & ~IDMSK) | (ID & IDMSK)，然后置 CSR.SIGNAL。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_SIGNAL）", "PCSX2 pcsx2/GS/GSRegs.h:764", "PCSX2 pcsx2/Gif_Unit.cpp:50"]
+
+  - name: FINISH
+    offset: 0x61
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_FINISH）"
+    brief: 之前的绘图全部完成后产生 FINISH 事件
+    desc: 写入任意值。此前所有绘图结束后置 CSR.FINISH。QEMU 的绘图是同步的，写入时立即置位。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_FINISH）", "PCSX2 pcsx2/Gif_Unit.cpp:71"]
+
+  - name: LABEL
+    offset: 0x62
+    access: WO
+    check: "GS 一般寄存器无总线地址，offset 为寄存器地址（ps2_gs.c GS_LABEL）"
+    status: reference
+    brief: 更新 SIGLBLID.LBLID，不产生事件
+    desc: 第 31:0 位 ID，第 63:32 位 IDMSK。LBLID = (LBLID & ~IDMSK) | (ID & IDMSK)。
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["QEMU hw/display/ps2_gs.c（ps2_gs_write_reg：GS_LABEL）", "PCSX2 pcsx2/GS/GSRegs.h:670", "PCSX2 pcsx2/Gif_Unit.cpp:80"]

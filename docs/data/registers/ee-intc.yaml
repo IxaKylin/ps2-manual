@@ -1,0 +1,100 @@
+# EE 中断控制器（INTC）寄存器。本文件同时作为寄存器数据格式的范例，
+# 格式说明见 docs/data/SCHEMA.md。
+block: ee-intc
+title: EE 中断控制器
+page: /chapters/04-ee-intc
+base: 0x1000F000
+size: 0x20
+bus: EE 总线
+access_size: 32 位或 64 位；64 位访问只有低 32 位有效（高 32 位读出为 0，写入被忽略）
+width: 32
+status: verified
+qemu:
+  files: [include/hw/intc/ps2_intc.h, hw/intc/ps2_intc.c, hw/mips/ps2_ee.c, hw/mips/ps2.c]
+registers:
+  - name: I_STAT
+    addr: 0x1000F000
+    offset: 0x00
+    access: R/W1C
+    reset: 0x00000000
+    brief: 中断状态，每个中断源一位，写 1 清零
+    desc: >-
+      每个中断源占一位。中断源信号出现上升沿时，对应位置 1 并保持，直到程序向该位写 1 清零；写 0 无影响。
+      I_STAT 的置位不受 I_MASK 影响：被屏蔽的中断源照样在 I_STAT 中留下记录，之后一旦允许，
+      INTC 立即向 R5900 发出 INT0。PCSX2 与 ps2tek 中该寄存器名为 INTC_STAT。
+    fields:
+      - { bits: "0", name: GS, reset: 0, status: reference, desc: "GS 中断。GS CSR 中有未被 GS IMR 屏蔽的事件（SIGNAL、FINISH、VSINT 等）时置 1，详见 4.5 节。QEMU 已实现，但没有测试覆盖" }
+      - { bits: "1", name: SBUS, reset: 0, desc: "SBUS 中断。IOP 以 16 位或 32 位宽度向 ICFG（IOP 地址 0x1F801450）写入且第 1 位为 1 时置 1" }
+      - { bits: "2", name: VBON, reset: 0, desc: "场消隐开始（VBLANK start），每场一次" }
+      - { bits: "3", name: VBOF, reset: 0, desc: "场消隐结束（VBLANK end），QEMU 中在场消隐开始后 1.4 ms 产生" }
+      - { bits: "4", name: VIF0, reset: 0, status: unimplemented, desc: "VIF0 中断：VIFcode 的 i 位使 VIF0 停顿并置 1" }
+      - { bits: "5", name: VIF1, reset: 0, status: unimplemented, desc: "VIF1 中断：VIFcode 的 i 位使 VIF1 停顿并置 1" }
+      - { bits: "6", name: VU0, reset: 0, status: unimplemented, desc: "VU0 中断：VU0 微程序执行到 D 位或 T 位且 FBRST 中对应允许位为 1" }
+      - { bits: "7", name: VU1, reset: 0, status: unimplemented, desc: "VU1 中断：VU1 微程序执行到 D 位或 T 位且 FBRST 中对应允许位为 1" }
+      - { bits: "8", name: IPU, reset: 0, status: unimplemented, desc: "IPU 中断：IPU 命令执行结束等" }
+      - { bits: "9", name: TIM0, reset: 0, desc: "定时器 0：比较匹配标志（EQUF）或溢出标志（OVFF）由 0 变为 1" }
+      - { bits: "10", name: TIM1, reset: 0, desc: "定时器 1，触发条件同 TIM0" }
+      - { bits: "11", name: TIM2, reset: 0, desc: "定时器 2，触发条件同 TIM0" }
+      - { bits: "12", name: TIM3, reset: 0, desc: "定时器 3，触发条件同 TIM0" }
+      - { bits: "13", name: SFIFO, reset: 0, status: unimplemented, desc: "SIO 调试串口 FIFO 中断" }
+      - { bits: "14", name: VU0WD, reset: 0, status: unimplemented, desc: "VU0 看门狗：VU0 微程序长时间不结束" }
+      - { bits: "15", name: PGPU, reset: 0, status: unimplemented, desc: "PGPU 中断（PS1 兼容模式下的图形接口）；ps2tek 的位表中没有此位" }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0，写入无效 }
+    ops:
+      - 读 I_STAT，与 I_MASK 相与，得到待处理且已允许的中断源。
+      - 处理完毕后只向已处理的位写 1 清除，例如写 0x00000004 清除 VBON；不要写回整个读出值，以免清掉处理期间新到达的中断。
+      - 若中断源本身也有状态标志（GS CSR、定时器 MODE 等），应先清中断源的标志，再清 I_STAT 对应位。
+    notes:
+      - QEMU 按上升沿锁存：中断源信号保持为高时只置位一次。GS 位 0 的信号是电平信号，GS CSR 中的事件不清除，I_STAT.GS 清零后不会再次置 1。
+      - QEMU 中位 4～8、13～15 的中断源未接入，这些位永远不会被硬件置 1，但仍可读写（写 1 清零）。
+      - PCSX2 在中断源每次触发时直接置位，不判断边沿。
+    source:
+      - "QEMU hw/intc/ps2_intc.c（ps2_intc_set_irq、ps2_intc_write）"
+      - "QEMU include/hw/intc/ps2_intc.h（PS2_INTC_GS…PS2_INTC_PGPU）"
+      - "QEMU hw/mips/ps2.c、hw/mips/ps2_ee.c（中断源连线）"
+      - "PCSX2 pcsx2/Hw.h:304（INTC_STAT）"
+      - "PCSX2 pcsx2/Dmac.h:204（enum INTCIrqs）"
+      - "PCSX2 pcsx2/HwWrite.cpp:135（写 1 清零）"
+      - "ps2tek §EE Interrupt Controller (INTC)"
+  - name: I_MASK
+    addr: 0x1000F010
+    offset: 0x10
+    access: R/W1T
+    reset: 0x00000000
+    brief: 中断屏蔽，为 1 的位允许对应中断源，写 1 翻转
+    desc: >-
+      位定义与 I_STAT 相同。为 1 的位允许对应中断源送往 R5900。写 1 使对应位翻转，写 0 无影响，
+      因此不能用“写入目标值”的方式设置 I_MASK。当 (I_STAT & I_MASK) ≠ 0 时，INTC 输出 INT0，
+      反映在 R5900 COP0 Cause 寄存器的 IP2 位（第 10 位）。PCSX2 与 ps2tek 中该寄存器名为 INTC_MASK。
+    fields:
+      - { bits: "0", name: GS, reset: 0, desc: 允许 GS 中断 }
+      - { bits: "1", name: SBUS, reset: 0, desc: 允许 SBUS 中断 }
+      - { bits: "2", name: VBON, reset: 0, desc: 允许场消隐开始中断 }
+      - { bits: "3", name: VBOF, reset: 0, desc: 允许场消隐结束中断 }
+      - { bits: "4", name: VIF0, reset: 0, status: unimplemented, desc: "允许 VIF0 中断（QEMU 中该中断源未接入，本位仅可读写）" }
+      - { bits: "5", name: VIF1, reset: 0, status: unimplemented, desc: "允许 VIF1 中断（中断源未接入）" }
+      - { bits: "6", name: VU0, reset: 0, status: unimplemented, desc: "允许 VU0 中断（中断源未接入）" }
+      - { bits: "7", name: VU1, reset: 0, status: unimplemented, desc: "允许 VU1 中断（中断源未接入）" }
+      - { bits: "8", name: IPU, reset: 0, status: unimplemented, desc: "允许 IPU 中断（中断源未接入）" }
+      - { bits: "9", name: TIM0, reset: 0, desc: 允许定时器 0 中断 }
+      - { bits: "10", name: TIM1, reset: 0, desc: 允许定时器 1 中断 }
+      - { bits: "11", name: TIM2, reset: 0, desc: 允许定时器 2 中断 }
+      - { bits: "12", name: TIM3, reset: 0, desc: 允许定时器 3 中断 }
+      - { bits: "13", name: SFIFO, reset: 0, status: unimplemented, desc: "允许 SFIFO 中断（中断源未接入）" }
+      - { bits: "14", name: VU0WD, reset: 0, status: unimplemented, desc: "允许 VU0 看门狗中断（中断源未接入）" }
+      - { bits: "15", name: PGPU, reset: 0, status: unimplemented, desc: "允许 PGPU 中断（中断源未接入）" }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0，写入无效 }
+    ops:
+      - 允许某一中断源：先读 I_MASK，若该位为 0 再向该位写 1；若已为 1 则不要写，否则会将其关闭。
+      - 禁止某一中断源：先读 I_MASK，若该位为 1 再向该位写 1。
+      - 复位后 I_MASK 为 0，所有中断源均被屏蔽。
+    notes:
+      - 写 1 翻转是本寄存器最常见的错误来源。按“读—或—写”方式置位会把已允许的位关闭。
+      - EE 内核的 _EnableIntc / _DisableIntc 系统调用按上述“先读后翻转”的方式操作本寄存器。
+      - 没有 qtest 检查 I_MASK 的读出与写 1 翻转；可信度依据真实 BIOS 启动到 OSDSYS 的记录：该过程依赖 EE 内核经 INTC 收到的中断（中断向量 0x200 修正后 BIOS 才能继续），I_MASK 不正确时这些中断无法送到 R5900。建模记录 audit.md:1130：运行 OSDSYS 时 EE 在内核中断入口 0x80000200 处被采样。qtest ps2/irq 只向 I_MASK 写 0xFFFF，写 1 翻转与屏蔽作用没有 qtest。
+    source:
+      - "QEMU hw/intc/ps2_intc.c（ps2_intc_write、ps2_intc_update）"
+      - "PCSX2 pcsx2/Hw.h:305（INTC_MASK）"
+      - "PCSX2 pcsx2/HwWrite.cpp:140（写 1 翻转）"
+      - "ps2tek §EE Interrupt Controller (INTC)"
+      - "ps2tek §BIOS EE Syscalls（_EnableIntc、_DisableIntc）"

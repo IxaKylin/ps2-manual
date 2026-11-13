@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" width="960" height="600" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .gfx{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .iop{fill:#e7f5ec;stroke:#2e8b57;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .blk{fill:#ffffff;stroke-width:1.3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .bus{stroke:#2f6fb2;stroke-width:7;stroke-linecap:round}
+    .ibus{stroke:#2e8b57;stroke-width:5;stroke-linecap:round}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+  </defs>
+  <rect width="960" height="600" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 7-2 UNPACK 的数据流</text>
+  <text x="24" y="58" class="s">上：一个向量从 FIFO 到 VU 数据存储器经过的处理；下：CYCLE.CL/WL 决定的写入地址。</text>
+
+  <!-- 1 FIFO -->
+  <rect x="24" y="80" width="180" height="190" rx="10" class="gfx"/>
+  <text x="38" y="104" class="h">VIF FIFO</text>
+  <rect x="38" y="116" width="152" height="26" rx="4" class="blk" stroke="#7a4bb3"/>
+  <text x="48" y="134" class="b">VIFcode：UNPACK</text>
+  <rect x="38" y="148" width="152" height="26" rx="4" class="blk" stroke="#7a4bb3"/>
+  <text x="48" y="166" class="s">压缩数据字 0</text>
+  <rect x="38" y="180" width="152" height="26" rx="4" class="blk" stroke="#7a4bb3"/>
+  <text x="48" y="198" class="s">压缩数据字 1</text>
+  <rect x="38" y="212" width="152" height="26" rx="4" class="blk" stroke="#7a4bb3"/>
+  <text x="48" y="230" class="s">……</text>
+  <text x="38" y="258" class="s">共 ⌈向量数 × 位数 / 32⌉ 个字</text>
+  <path d="M204 175 H242" class="ln" marker-end="url(#a)"/>
+
+  <!-- 2 format -->
+  <rect x="244" y="80" width="230" height="190" rx="10" class="ee"/>
+  <text x="258" y="104" class="h">格式转换</text>
+  <text x="258" y="130" class="s">VN：S / V2 / V3 / V4</text>
+  <text x="258" y="152" class="s">VL：32 / 16 / 8 位</text>
+  <text x="258" y="174" class="s">V4-5：RGBA5551 → 4 × 32 位</text>
+  <text x="258" y="196" class="s">USN：符号扩展 / 零扩展</text>
+  <text x="258" y="218" class="s">S 格式把一个值复制到 4 个字段</text>
+  <text x="258" y="250" class="b">输出：x、y、z、w 各 32 位</text>
+  <path d="M474 175 H512" class="ln" marker-end="url(#a)"/>
+
+  <!-- 3 write mode -->
+  <rect x="514" y="80" width="220" height="190" rx="10" class="ee"/>
+  <text x="528" y="104" class="h">写入模式</text>
+  <text x="528" y="130" class="s">m = 0：各字段写解压数据</text>
+  <text x="528" y="152" class="s">m = 1：按 MASK，每字段 2 位</text>
+  <text x="540" y="174" class="s">0 解压数据　1 ROW Rf</text>
+  <text x="540" y="196" class="s">2 COL C[r]　3 不写</text>
+  <text x="528" y="218" class="s">MODE：0 直接 / 1 偏移 / 2 差分</text>
+  <text x="528" y="250" class="b">ROW / COL：STROW、STCOL</text>
+  <path d="M734 175 H772" class="ln" marker-end="url(#a)"/>
+
+  <!-- 4 VU mem -->
+  <rect x="774" y="80" width="162" height="190" rx="10" class="mem"/>
+  <text x="788" y="104" class="h">VU 数据存储器</text>
+  <rect x="788" y="116" width="134" height="26" rx="4" class="blk" stroke="#c07a1a"/>
+  <text x="798" y="134" class="s">ADDR + 0</text>
+  <rect x="788" y="148" width="134" height="26" rx="4" class="blk" stroke="#c07a1a"/>
+  <text x="798" y="166" class="s">ADDR + 1</text>
+  <rect x="788" y="180" width="134" height="26" rx="4" class="blk" stroke="#c07a1a"/>
+  <text x="798" y="198" class="s">……</text>
+  <text x="788" y="232" class="s">ADDR 以四字为单位</text>
+  <text x="788" y="250" class="s">VIF1 且 FLG = 1 时加 TOPS</text>
+
+  <!-- CYCLE examples -->
+  <text x="24" y="310" class="h">CYCLE 与写入地址</text>
+  <rect x="24" y="560" width="14" height="14" class="gfx"/>
+  <text x="44" y="572" class="s">写入解压数据</text>
+  <rect x="134" y="560" width="14" height="14" class="mem"/>
+  <text x="154" y="572" class="s">补写：没有数据，按 MASK 写 ROW / COL</text>
+  <rect x="384" y="560" width="14" height="14" class="ext"/>
+  <text x="404" y="572" class="s">跳过：不写，保持原值</text>
+
+  <!-- skipping -->
+  <text x="24" y="356" class="s">+0</text>
+  <text x="24" y="380" class="s">+1</text>
+  <text x="24" y="404" class="s">+2</text>
+  <text x="24" y="428" class="s">+3</text>
+  <text x="24" y="452" class="s">+4</text>
+  <text x="24" y="476" class="s">+5</text>
+  <text x="24" y="500" class="s">+6</text>
+  <text x="24" y="524" class="s">+7</text>
+  <rect x="50" y="340" width="170" height="22" rx="3" class="gfx"/>
+  <text x="60" y="356" class="s">向量 0</text>
+  <rect x="50" y="364" width="170" height="22" rx="3" class="gfx"/>
+  <text x="60" y="380" class="s">向量 1</text>
+  <rect x="50" y="388" width="170" height="22" rx="3" class="ext"/>
+  <text x="60" y="404" class="s">跳过</text>
+  <rect x="50" y="412" width="170" height="22" rx="3" class="ext"/>
+  <text x="60" y="428" class="s">跳过</text>
+  <rect x="50" y="436" width="170" height="22" rx="3" class="gfx"/>
+  <text x="60" y="452" class="s">向量 2</text>
+  <rect x="50" y="460" width="170" height="22" rx="3" class="gfx"/>
+  <text x="60" y="476" class="s">向量 3</text>
+  <rect x="50" y="484" width="170" height="22" rx="3" class="ext"/>
+  <text x="60" y="500" class="s">跳过</text>
+  <rect x="50" y="508" width="170" height="22" rx="3" class="ext"/>
+  <text x="60" y="524" class="s">跳过</text>
+  <text x="240" y="356" class="n">跳写：CL = 4，WL = 2，NUM = 4</text>
+  <text x="240" y="384" class="s">每 CL 个四字中写前 WL 个，其余跳过</text>
+  <text x="240" y="406" class="s">地址 = ADDR + ⌊n / WL⌋ × CL + n mod WL</text>
+  <text x="240" y="428" class="s">每个写入的四字都取一个向量的数据</text>
+
+  <!-- filling -->
+  <text x="494" y="356" class="s">+0</text>
+  <text x="494" y="380" class="s">+1</text>
+  <text x="494" y="404" class="s">+2</text>
+  <text x="494" y="428" class="s">+3</text>
+  <text x="494" y="452" class="s">+4</text>
+  <text x="494" y="476" class="s">+5</text>
+  <text x="494" y="500" class="s">+6</text>
+  <text x="494" y="524" class="s">+7</text>
+  <rect x="520" y="340" width="170" height="22" rx="3" class="gfx"/>
+  <text x="530" y="356" class="s">向量 0（r = 0）</text>
+  <rect x="520" y="364" width="170" height="22" rx="3" class="gfx"/>
+  <text x="530" y="380" class="s">向量 1（r = 1）</text>
+  <rect x="520" y="388" width="170" height="22" rx="3" class="mem"/>
+  <text x="530" y="404" class="s">补写（r = 2）</text>
+  <rect x="520" y="412" width="170" height="22" rx="3" class="mem"/>
+  <text x="530" y="428" class="s">补写（r = 3）</text>
+  <rect x="520" y="436" width="170" height="22" rx="3" class="gfx"/>
+  <text x="530" y="452" class="s">向量 2（r = 0）</text>
+  <rect x="520" y="460" width="170" height="22" rx="3" class="gfx"/>
+  <text x="530" y="476" class="s">向量 3（r = 1）</text>
+  <rect x="520" y="484" width="170" height="22" rx="3" class="mem"/>
+  <text x="530" y="500" class="s">补写（r = 2）</text>
+  <rect x="520" y="508" width="170" height="22" rx="3" class="mem"/>
+  <text x="530" y="524" class="s">补写（r = 3）</text>
+  <text x="710" y="356" class="n">补写：CL = 2，WL = 4，NUM = 8</text>
+  <text x="710" y="384" class="s">地址连续：ADDR + n</text>
+  <text x="710" y="406" class="s">每 WL 个四字中前 CL 个取数据</text>
+  <text x="710" y="428" class="s">其余 WL − CL 个没有数据</text>
+  <text x="710" y="450" class="s">r = n mod WL 为 MASK 行号</text>
+  <text x="710" y="472" class="s">（大于 3 时取 3）</text>
+</svg>

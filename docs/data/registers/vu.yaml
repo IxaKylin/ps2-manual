@@ -1,0 +1,258 @@
+# VU 整数寄存器与控制寄存器。R5900 经 CFC2/CTC2 访问 VU0 的这些寄存器，
+# offset 写 CFC2/CTC2 的寄存器编号（指令中的 rd 字段），不是地址。
+# VF00–VF31 与 ACC 为 128 位浮点寄存器，在第 7 章正文中说明。
+# 格式说明见 docs/data/SCHEMA.md。
+block: vu
+title: VU 整数寄存器与控制寄存器
+page: /chapters/07-vpu
+bus: VU 内部（R5900 经 CFC2/CTC2 访问 VU0）
+access_size: 32 位，仅 CFC2/CTC2
+width: 32
+status: verified
+qemu:
+  files: [include/hw/display/ps2_vu.h, hw/display/ps2_vu.c, hw/display/ps2_vu0.c]
+registers:
+  - name: VI00
+    offset: 0
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    width: 16
+    access: RO
+    reset: 0x0000
+    brief: 整数寄存器 0，恒为 0
+    desc: 16 位整数寄存器，读出恒为 0。微程序与 CTC2 对它的写入均无效。
+    source: ["ps2tek §VU Registers", "PCSX2 pcsx2/VU0.cpp:170（CTC2）", "QEMU hw/display/ps2_vu0.c（ps2_vu0_write_ctrl）"]
+
+  - name: VI01-VI15
+    offset: 1
+    check: CFC2/CTC2 寄存器编号 1–15，无总线地址
+    width: 16
+    access: R/W
+    reset: 0x0000
+    brief: 整数寄存器 1–15
+    desc: >-
+      15 个 16 位整数寄存器，用于地址计算、循环计数和分支条件。VU 数据存储器的
+      装入 / 存储指令以 VI 寄存器的值作为四字地址。CFC2 读出时零扩展为 32 位；
+      CTC2 写入时只保留低 16 位。FCEQ、FCAND、FCOR 把结果写入 VI01。
+    fields:
+      - { bits: "15:0", name: VI, reset: 0, desc: 16 位整数值 }
+    source: ["ps2tek §VU Registers", "QEMU hw/display/ps2_vu.c（ps2_vu_read_reg、ps2_vu_write_reg）"]
+
+  - name: STATUS
+    offset: 16
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: 状态标志（当前标志与累积标志）
+    desc: >-
+      低 6 位反映最近一次运算的结果，高 6 位为对应的累积（粘滞）标志，一旦置 1 就保持到软件写入。
+      Z、S、U、O 分别为 MAC 标志中各字段零、符号、下溢、上溢标志的或。CTC2 只能写入第 11:6 位，
+      第 5:0 位保持不变；微程序的 FSSET 同样只写第 11:6 位。
+    fields:
+      - { bits: "0", name: Z, access: RO, reset: 0, desc: 零标志：MAC 中任一 Z 字段为 1 }
+      - { bits: "1", name: S, access: RO, reset: 0, desc: 符号标志：MAC 中任一 S 字段为 1 }
+      - { bits: "2", name: U, access: RO, reset: 0, status: unimplemented, desc: 下溢标志。QEMU 不产生 }
+      - { bits: "3", name: O, access: RO, reset: 0, status: unimplemented, desc: 上溢标志。QEMU 不产生 }
+      - { bits: "4", name: I, access: RO, reset: 0, status: unimplemented, desc: 无效运算标志：DIV 执行 0/0，或 SQRT/RSQRT 的操作数为负。QEMU 不产生 }
+      - { bits: "5", name: D, access: RO, reset: 0, status: unimplemented, desc: 除零标志：DIV/RSQRT 除数为 0（0/0 除外）。QEMU 不产生 }
+      - { bits: "6", name: ZS, reset: 0, desc: Z 的累积标志 }
+      - { bits: "7", name: SS, reset: 0, desc: S 的累积标志 }
+      - { bits: "8", name: US, reset: 0, desc: U 的累积标志。QEMU 中只能由软件写入 }
+      - { bits: "9", name: OS, reset: 0, desc: O 的累积标志。QEMU 中只能由软件写入 }
+      - { bits: "10", name: IS, reset: 0, desc: I 的累积标志。QEMU 中只能由软件写入 }
+      - { bits: "11", name: DS, reset: 0, desc: D 的累积标志。QEMU 中只能由软件写入 }
+      - { bits: "31:12", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    ops:
+      - 清除全部累积标志：CTC2 写 0。
+    notes:
+      - 硬件上标志随 FMAC 流水线延迟 4 个周期更新（ps2tek §VU Registers）；QEMU 在每个指令对执行后立即更新。
+      - MAX、MINI 等不影响标志的指令不改变 STATUS。
+    source: ["ps2tek §VU Registers（Status Flags）", "PCSX2 pcsx2/x86/microVU_Macro.inl:489-496（recCTC2）", "QEMU hw/display/ps2_vu.c（vu_commit_flags）", "QEMU hw/display/ps2_vu0.c（ps2_vu0_write_ctrl）"]
+
+  - name: MAC
+    offset: 17
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: RO
+    reset: 0x00000000
+    brief: MAC 标志（每个字段的零、符号、下溢、上溢）
+    desc: >-
+      每个 FMAC（对应 x、y、z、w 一个字段）给出 4 个标志，共 16 位。每组 4 位中最高位对应 x，
+      最低位对应 w。只有 dest 中选中的字段会置位，未选中的字段为 0。CTC2 写入无效。
+    fields:
+      - { bits: "3:0", name: Z, reset: 0, desc: 零标志，第 3 位 x … 第 0 位 w。结果为 +0.0 或 −0.0 时置 1 }
+      - { bits: "7:4", name: S, reset: 0, desc: 符号标志，第 7 位 x … 第 4 位 w。结果第 31 位为 1 时置 1 }
+      - { bits: "11:8", name: U, reset: 0, status: unimplemented, desc: 下溢标志，第 11 位 x … 第 8 位 w。QEMU 不产生 }
+      - { bits: "15:12", name: O, reset: 0, status: unimplemented, desc: 上溢标志，第 15 位 x … 第 12 位 w。QEMU 不产生 }
+      - { bits: "31:16", name: 保留, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VU Registers（MAC Flags）", "PCSX2 pcsx2/VU0.cpp:173（CTC2 只读）", "QEMU hw/display/ps2_vu.c（VU_MAC_Z、VU_MAC_S）"]
+
+  - name: CLIP
+    offset: 18
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: 裁剪标志（最近 4 次 CLIP 的判定结果）
+    desc: >-
+      CLIPw.xyz 指令把 x、y、z 与 ±|w| 比较，得到 6 个判定位。每执行一次 CLIP，原有内容左移 6 位，
+      新结果放入第 5:0 位，最多保留 4 次结果（24 位）。微程序用 FCEQ、FCAND、FCOR、FCGET
+      检查，FCSET 写入。
+    fields:
+      - { bits: "0", name: +x, reset: 0, desc: x > +|w| }
+      - { bits: "1", name: -x, reset: 0, desc: x < −|w| }
+      - { bits: "2", name: +y, reset: 0, desc: y > +|w| }
+      - { bits: "3", name: -y, reset: 0, desc: y < −|w| }
+      - { bits: "4", name: +z, reset: 0, desc: z > +|w| }
+      - { bits: "5", name: -z, reset: 0, desc: z < −|w| }
+      - { bits: "11:6", name: PREV1, reset: 0, desc: 上一次 CLIP 的结果，格式同第 5:0 位 }
+      - { bits: "17:12", name: PREV2, reset: 0, desc: 上两次 CLIP 的结果 }
+      - { bits: "23:18", name: PREV3, reset: 0, desc: 上三次 CLIP 的结果 }
+      - { bits: "31:24", name: 保留, reset: 0, desc: 读出为 0 }
+    source: ["ps2tek §VU Registers（Clip Flags）", "QEMU hw/display/ps2_vu.c（CLIPw）"]
+
+  - name: R
+    offset: 20
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x3F800000
+    brief: 随机数寄存器
+    desc: >-
+      随机数发生器的状态，格式为指数固定的单精度浮点数：第 22:0 位为随机尾数，第 31:23 位固定为
+      0x07F（符号 0、指数 127），即取值在 [1.0, 2.0) 之间。RINIT、RXOR 设置，RNEXT 更新，RGET 读取。
+    fields:
+      - { bits: "22:0", name: MANT, reset: 0, desc: 随机尾数 }
+      - { bits: "31:23", name: EXP, access: RO, reset: 0x07F, desc: 固定为 0x07F。CFC2 读出时此部分为 0 }
+    notes:
+      - CFC2 读 R 只返回第 22:0 位；CTC2 写 R 时第 31:23 位强制为 0x07F。
+    source: ["PCSX2 pcsx2/VU0.cpp:149-150（CFC2）", "PCSX2 pcsx2/VU0.cpp:177-178（CTC2）", "QEMU hw/display/ps2_vu0.c（ps2_vu0_read_ctrl）", "QEMU hw/display/ps2_vu.c（RNEXT）"]
+
+  - name: I
+    offset: 21
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: 立即数寄存器（单精度浮点）
+    desc: >-
+      32 位单精度浮点数，供带 i 后缀的上部指令（ADDi、MULi、MADDi 等）作为第二操作数。
+      微程序中，上部指令的 I 位为 1 时，同一指令对的下部 32 位不作指令执行，而是装入 I 寄存器。
+    fields:
+      - { bits: "31:0", name: I, reset: 0, desc: 单精度浮点值 }
+    source: ["ps2tek §VU Instruction Format and Decoding", "QEMU hw/display/ps2_vu.c（ps2_vu_run）"]
+
+  - name: Q
+    offset: 22
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: FDIV 结果寄存器（单精度浮点）
+    desc: >-
+      DIV、SQRT、RSQRT 的结果。结果在延迟之后才写入 Q：DIV/SQRT 为 7 个周期，RSQRT 为 13 个周期；
+      其间读 Q 得到旧值。WAITQ 等待结果到达。带 q 后缀的上部指令以 Q 为第二操作数。
+    fields:
+      - { bits: "31:0", name: Q, reset: 0, desc: 单精度浮点值 }
+    notes:
+      - QEMU 在微程序中按指令对计数模拟延迟（7 / 13 个指令对），微程序结束时未到达的结果立即写入；宏模式下没有延迟。
+    source: ["ps2tek §VU Pipelining（FDIV Pipeline）", "QEMU hw/display/ps2_vu.c（VU_DIV_LATENCY、VU_RSQRT_LATENCY）"]
+
+  - name: P
+    offset: 23
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    brief: EFU 结果寄存器（仅 VU1）
+    desc: >-
+      VU1 的 EFU 指令（ESADD、ERSQRT、ESIN、EEXP 等）的结果，MFP 把它读到 VF 寄存器，WAITP 等待结果到达。
+      VU0 没有 EFU，CFC2 读到的是 VU0 自身的 P，始终为 0。
+    fields:
+      - { bits: "31:0", name: P, reset: 0, desc: 单精度浮点值 }
+    notes:
+      - QEMU 已实现，但没有测试覆盖。
+      - 硬件上各 EFU 指令延迟不同（11–54 个周期，ps2tek §VU Pipelining）；QEMU 统一按 12 个指令对处理。
+    source: ["ps2tek §VU Pipelining（EFU Pipeline）", "PCSX2 pcsx2/VU.h:16", "QEMU hw/display/ps2_vu.c（VU_EFU_LATENCY）"]
+
+  - name: TPC
+    offset: 26
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: RO
+    reset: 0x00000000
+    brief: 微程序停止时的程序计数器
+    desc: >-
+      VU0 微程序结束（E 位）后的下一条指令对地址，以指令对（8 字节）为单位。VIF0 的 MSCNT 从此处继续执行。
+      CTC2 写入无效。
+    fields:
+      - { bits: "15:0", name: TPC, reset: 0, desc: 指令对地址 }
+      - { bits: "31:16", name: 保留, reset: 0, desc: 读出为 0 }
+    source: ["PCSX2 pcsx2/VU0.cpp:174（CTC2 只读）", "QEMU hw/display/ps2_vu.c（ps2_vu_run）"]
+
+  - name: CMSAR0
+    offset: 27
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: VCALLMSR 的微程序起始地址
+    desc: VCALLMSR 指令从此地址（以指令对为单位）启动 VU0 微程序。
+    fields:
+      - { bits: "15:0", name: ADDR, reset: 0, desc: 指令对地址 }
+      - { bits: "31:16", name: 保留, reset: 0, desc: 写入无效 }
+    source: ["QEMU hw/display/ps2_vu0.c（ps2_vu0_macro）", "PCSX2 pcsx2/VU.h:19"]
+
+  - name: FBRST
+    offset: 28
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: VU0/VU1 强制中止、复位与调试允许
+    desc: >-
+      低 8 位控制 VU0，高 8 位控制 VU1，两组格式相同。FB、RS 为写 1 动作位，读出为 0；
+      DE、TE 为允许位，读回为写入值。QEMU 只保存 DE/TE（写入值 AND 0x0C0C）。
+    fields:
+      - { bits: "0", name: FB0, access: WO, status: unimplemented, desc: 写 1 强制中止 VU0。QEMU 忽略 }
+      - { bits: "1", name: RS0, access: WO, status: unimplemented, desc: 写 1 复位 VU0。PCSX2 此时复位 VU0 寄存器；QEMU 忽略 }
+      - { bits: "2", name: DE0, reset: 0, status: unimplemented, desc: 为 1 时 VU0 遇到 D 位停止并发出中断。QEMU 只保存 }
+      - { bits: "3", name: TE0, reset: 0, status: unimplemented, desc: 为 1 时 VU0 遇到 T 位停止并发出中断。QEMU 只保存 }
+      - { bits: "7:4", name: 保留, reset: 0, desc: 读出为 0 }
+      - { bits: "8", name: FB1, access: WO, status: unimplemented, desc: 写 1 强制中止 VU1。QEMU 忽略 }
+      - { bits: "9", name: RS1, access: WO, status: unimplemented, desc: 写 1 复位 VU1。QEMU 忽略 }
+      - { bits: "10", name: DE1, reset: 0, status: unimplemented, desc: VU1 的 D 位允许。QEMU 只保存 }
+      - { bits: "11", name: TE1, reset: 0, status: unimplemented, desc: VU1 的 T 位允许。QEMU 只保存 }
+      - { bits: "31:12", name: 保留, reset: 0, desc: 读出为 0 }
+    notes:
+      - 位的作用依据 PCSX2（VU0.cpp 与 VU0microInterp.cpp/VU1microInterp.cpp 中的 D/T 位处理）；FB0、RS0、DE0、TE0 等名称为通行写法，ps2tek 未给出，属参考内容。
+    source: ["PCSX2 pcsx2/VU0.cpp:180-195（CTC2 FBRST）", "PCSX2 pcsx2/VU0microInterp.cpp:45-62", "PCSX2 pcsx2/VU1microInterp.cpp:45-62", "QEMU hw/display/ps2_vu0.c（VU0_FBRST_MASK）"]
+
+  - name: VPU_STAT
+    offset: 29
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: RO
+    reset: 0x00000000
+    status: unimplemented
+    brief: VU0/VU1 运行状态
+    desc: >-
+      低 8 位为 VU0 的状态，高 8 位为 VU1 的状态。R5900 可以读此寄存器判断微程序是否仍在运行。
+      QEMU 中微程序启动后同步执行到结束，VPU_STAT 读出恒为 0。
+    fields:
+      - { bits: "0", name: VBS0, desc: VU0 正在运行微程序 }
+      - { bits: "1", name: VDS0, desc: VU0 因 D 位（DE0 = 1）停止 }
+      - { bits: "2", name: VTS0, desc: VU0 因 T 位（TE0 = 1）停止 }
+      - { bits: "7:3", name: 保留, desc: 含义未查明 }
+      - { bits: "8", name: VBS1, desc: VU1 正在运行微程序 }
+      - { bits: "9", name: VDS1, desc: VU1 因 D 位（DE1 = 1）停止 }
+      - { bits: "10", name: VTS1, desc: VU1 因 T 位（TE1 = 1）停止 }
+      - { bits: "11", name: 保留, desc: 含义未查明 }
+      - { bits: "12", name: VGW1, desc: VU1 的 XGKICK 传输进行中 }
+      - { bits: "31:13", name: 保留, desc: 含义未查明 }
+    notes:
+      - 位的含义依据 PCSX2 中对 VPU_STAT 的置位与测试；位名为通行写法，未见于 ps2tek。第 3–7 位、第 11 位、第 13 位以上在 PCSX2 中也未使用。
+    source: ["PCSX2 pcsx2/VU0micro.cpp:62-63", "PCSX2 pcsx2/VU1micro.cpp:70-71", "PCSX2 pcsx2/VU0microInterp.cpp:49-58", "PCSX2 pcsx2/VUops.cpp:1926（XGKICK）", "QEMU hw/display/ps2_vu0.c（ps2_vu0_read_ctrl）"]
+
+  - name: CMSAR1
+    offset: 31
+    check: CFC2/CTC2 寄存器编号，无总线地址
+    access: WO
+    brief: 启动 VU1 微程序
+    desc: >-
+      CTC2 写入时，以写入值的低 16 位为指令对地址启动 VU1 微程序。R5900 不经 VIF1 就能启动 VU1。
+      QEMU 中 VU1 立即同步执行到结束；CFC2 读出为 0。
+    fields:
+      - { bits: "15:0", name: ADDR, desc: VU1 微程序起始指令对地址，按 VU1 微程序存储器大小（2048 个指令对）回绕 }
+      - { bits: "31:16", name: 保留, desc: 写入无效 }
+    source: ["PCSX2 pcsx2/VU0.cpp:197-199", "QEMU hw/display/ps2_vu0.c（ps2_vu0_write_ctrl）"]

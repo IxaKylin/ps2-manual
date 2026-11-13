@@ -1,0 +1,383 @@
+# EE DMA 控制器（DMAC）寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# 通道寄存器对 10 个通道写法相同，这里只描述一次，名称写作 Dn_xxx，
+# offset 为相对于通道基地址的偏移（通道基地址见第 6 章表 6-1）。
+# 全局寄存器给出绝对地址；其 offset 为相对于全局寄存器区 0x1000E000
+# （D_ENABLER/D_ENABLEW 为相对于 0x1000F500）的偏移，与 QEMU 头文件中的
+# PS2_DMAC_D_xxx 常量一致。本块不写 base，以免与上述两种偏移混淆。
+block: ee-dmac
+title: EE DMA 控制器
+page: /chapters/06-dmac
+bus: EE 总线
+access_size: 32 位（64 位访问按低 32 位处理）
+width: 32
+status: verified
+qemu:
+  files: [include/hw/dma/ps2_dmac.h, hw/dma/ps2_dmac.c, hw/mips/ps2_ee.c]
+registers:
+  - name: Dn_CHCR
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    brief: 通道控制（方向、模式、启动），n = 0–9
+    desc: >-
+      通道控制寄存器，每个通道一个，地址为通道基地址 + 0x00。设定传输方向、逻辑传输模式、
+      DMAtag 处理方式，并通过 STR 位启动传输。传输结束时 DMAC 将 STR 清零，并将对应通道的
+      D_STAT.CISn 置 1。链模式下，DMAC 每读入一个 DMAtag，就把该 DMAtag 的第 31:16 位
+      复制到 TAG 位域，软件可据此判断最后处理的是哪种 DMAtag。
+    fields:
+      - name: DIR
+        bits: "0"
+        reset: 0
+        desc: 传输方向。只对通道 1（VIF1）与通道 7（SIF2）有效，其他通道方向固定。
+        values: { "0": "外设 → 存储器（to Memory）", "1": "存储器 → 外设（from Memory）" }
+      - { bits: "1", name: 保留, reset: 0, desc: 写入时写 0 }
+      - name: MOD
+        bits: "3:2"
+        reset: 0
+        desc: 逻辑传输模式。交错模式只适用于 SPR 通道 8/9，QEMU 未实现交错模式，按普通模式处理。
+        values: { "0": "普通模式（Normal）", "1": "链模式（Chain）", "2": "交错模式（Interleave）", "3": "保留" }
+      - name: ASP
+        bits: "5:4"
+        reset: 0
+        status: reference
+        desc: 地址栈指针。链模式下 call 标签压栈、ret 标签出栈时由 DMAC 更新，取值 0–2，表示 Dn_ASR0/Dn_ASR1 中已保存的返回地址个数。启动新的链传输前应写 0。qtest 只覆盖 ASP = 0 时 ret 标签结束传输；call 压栈与 ret 出栈 QEMU 已实现，但没有测试覆盖。
+      - name: TTE
+        bits: "6"
+        reset: 0
+        desc: DMAtag 传送允许。为 1 时，源链模式下每个 DMAtag 的高 64 位随数据一起送往外设（VIF 通道用于传送 VIFcode）。
+        values: { "0": "不传送 DMAtag", "1": "传送 DMAtag 高 64 位" }
+      - name: TIE
+        bits: "7"
+        reset: 0
+        desc: DMAtag 中断允许。为 1 时，IRQ 位为 1 的 DMAtag 所指数据传送完后，通道停止并置 CISn。
+        values: { "0": "忽略 DMAtag 的 IRQ 位", "1": "IRQ 位为 1 的 DMAtag 结束传输" }
+      - name: STR
+        bits: "8"
+        reset: 0
+        desc: 启动位。写 1（由 0 变为 1）启动传输；传输进行中读出为 1，结束后由 DMAC 清零。
+        values: { "0": "通道停止", "1": "启动 / 传输进行中" }
+      - { bits: "15:9", name: 保留, reset: 0, desc: 写入时写 0 }
+      - name: TAG
+        bits: "31:16"
+        reset: 0
+        desc: 最近读入的 DMAtag 的第 31:16 位（PCE、ID、IRQ），由 DMAC 在链模式下写入。
+    ops:
+      - 普通模式：写 Dn_MADR、Dn_QWC，再写 Dn_CHCR = 0x00000100（MOD=0，STR=1；VIF1/SIF2 还需按方向设定 DIR）。
+      - 源链模式：写 Dn_TADR、Dn_QWC = 0，再写 Dn_CHCR = 0x00000104（MOD=1，ASP=0，STR=1），需要 VIFcode 时同时置 TTE。
+      - 查询方式等待结束：循环读 Dn_CHCR，直到 STR 为 0；或者读 D_STAT.CISn。
+    notes:
+      - 只有 STR 由 0 变为 1 的写入会启动通道；传输进行中再次写入 STR=1 不会重新启动。
+      - QEMU 中存储器 → 外设的传输在写 CHCR 时立即完成，除非外设 FIFO 满而使通道暂停，因此写入后通常立即读到 STR = 0。
+      - 测试依据：DIR、MOD、TTE、TIE、STR 由 qtest ps2/vif0、ps2/sif-dma、ps2/dmac/spr、ps2/lite-bios/sif 覆盖；TAG 的读出见真实 BIOS 启动记录（SIF0 结束后 CHCR 读出 0x90000084）。
+    source: ["PCSX2 pcsx2/Dmac.h:110（tDMA_CHCR）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: Dn_MADR
+    offset: 0x10
+    access: R/W
+    reset: 0x00000000
+    brief: 传输存储器地址
+    desc: >-
+      存储器一侧的当前传输地址，按四字（16 字节）对齐，低 4 位写入无效。传输过程中随数据递增；
+      链模式下由 DMAtag 装入。第 31 位为 1 时地址指向暂存存储器 SPR（第 13:4 位为 SPR 内偏移），
+      为 0 时指向主存。
+    fields:
+      - { bits: "3:0", name: 保留, access: RO, reset: 0, desc: 固定为 0（四字对齐） }
+      - { bits: "30:4", name: ADDR, reset: 0, desc: 地址的第 30:4 位 }
+      - name: SPR
+        bits: "31"
+        reset: 0
+        desc: 存储器选择。对 SPR 通道 8/9 无效（这两个通道的 MADR 总是指主存）。
+        values: { "0": "主存", "1": "暂存存储器 SPR" }
+    notes:
+      - QEMU 中 SPR 地址按 0x3FF0 掩码，跨越 SPR 末尾时回绕到开头。
+      - QEMU 不模拟 0x7xxxxxxx 形式的 SPR 别名，也不模拟主存地址镜像。
+    source: ["PCSX2 pcsx2/Dmac.h:445（tDMAC_ADDR）", "PCSX2 pcsx2/Dmac.cpp:148（dmaGetAddr）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: Dn_QWC
+    offset: 0x20
+    access: R/W
+    reset: 0x00000000
+    brief: 剩余传输四字数
+    desc: >-
+      普通模式下为本次要传输的四字数；链模式下由 DMAtag 的 QWC 位域装入。传输过程中递减，
+      读出为尚未传输的四字数。
+    fields:
+      - { bits: "15:0", name: QWC, reset: 0, desc: 四字数，0–65535 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 写入无效，读出为 0 }
+    source: ["PCSX2 pcsx2/Hw.h:179", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: Dn_TADR
+    offset: 0x30
+    access: R/W
+    reset: 0x00000000
+    brief: 下一个 DMAtag 的地址（源链）
+    desc: >-
+      源链模式下下一个要读入的 DMAtag 的地址，四字对齐，第 31 位选择 SPR，格式同 Dn_MADR。
+      每处理一个 DMAtag，DMAC 按 ID 更新 TADR。只有通道 0、1、2、4、6、9 有此寄存器。
+    fields:
+      - { bits: "3:0", name: 保留, access: RO, reset: 0, desc: 固定为 0 }
+      - { bits: "30:4", name: ADDR, reset: 0, desc: DMAtag 地址第 30:4 位 }
+      - { bits: "31", name: SPR, reset: 0, desc: 为 1 时 DMAtag 位于 SPR }
+    source: ["PCSX2 pcsx2/Hw.h:178-287", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: Dn_ASR0
+    offset: 0x40
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    brief: 地址栈 0（call/ret 返回地址）
+    desc: >-
+      源链模式下 call 标签保存返回地址（call 数据块之后的地址）的第一级栈。
+      只有通道 0（VIF0）、1（VIF1）、2（GIF）有此寄存器。
+    fields:
+      - { bits: "3:0", name: 保留, access: RO, reset: 0, desc: 固定为 0 }
+      - { bits: "30:4", name: ADDR, reset: 0, desc: 返回地址第 30:4 位 }
+      - { bits: "31", name: SPR, reset: 0, desc: 为 1 时返回地址位于 SPR }
+    notes:
+      - QEMU 已实现，但没有测试覆盖：没有 qtest 使用 call 标签。
+    source: ["PCSX2 pcsx2/Hw.h:178-216", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: Dn_ASR1
+    offset: 0x50
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    brief: 地址栈 1（第二级返回地址）
+    desc: 第二级地址栈，格式同 Dn_ASR0。只有通道 0、1、2 有此寄存器。
+    fields:
+      - { bits: "3:0", name: 保留, access: RO, reset: 0, desc: 固定为 0 }
+      - { bits: "30:4", name: ADDR, reset: 0, desc: 返回地址第 30:4 位 }
+      - { bits: "31", name: SPR, reset: 0, desc: 为 1 时返回地址位于 SPR }
+    notes:
+      - QEMU 已实现，但没有测试覆盖：没有 qtest 使用 call 标签。
+    source: ["PCSX2 pcsx2/Hw.h:178-216", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: Dn_SADR
+    offset: 0x80
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: SPR 一侧地址（仅通道 8/9）
+    desc: >-
+      SPR 通道（8 fromSPR、9 toSPR）在暂存存储器一侧的传输地址，四字对齐，取值范围 0x0000–0x3FF0。
+      这两个通道在 Dn_MADR 指定的主存与 Dn_SADR 指定的 SPR 之间搬运数据。
+    fields:
+      - { bits: "3:0", name: 保留, access: RO, reset: 0, desc: 固定为 0 }
+      - { bits: "13:4", name: ADDR, reset: 0, desc: SPR 内偏移第 13:4 位 }
+      - { bits: "31:14", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 只保存写入值（按 0x3FF0 掩码），通道 8/9 不使用它：toSPR 读主存后丢弃数据，fromSPR 永不完成。
+    source: ["PCSX2 pcsx2/Hw.h:275, 287", "PCSX2 pcsx2/Dmac.cpp:80（SPRdmaGetAddr）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_CTRL
+    addr: 0x1000E000
+    offset: 0x00
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    brief: DMAC 总控制
+    desc: >-
+      DMAC 的总体设定：DMA 总允许、周期挪用、MFIFO 排出通道、停顿控制的源通道与排出通道、
+      释放周期。QEMU 保存全部位，但只使用 STS 位域。
+    fields:
+      - name: DMAE
+        bits: "0"
+        reset: 0
+        status: unimplemented
+        desc: DMA 总允许。为 0 时所有通道不工作。QEMU 不检查此位。
+        values: { "0": "禁止全部 DMA", "1": "允许 DMA" }
+      - name: RELE
+        bits: "1"
+        reset: 0
+        status: unimplemented
+        desc: 周期挪用允许。为 1 时 DMAC 每传输 RCYC 指定的周期数后释放总线给 CPU。
+        values: { "0": "关闭周期挪用", "1": "开启周期挪用" }
+      - name: MFD
+        bits: "3:2"
+        reset: 0
+        status: unimplemented
+        desc: MFIFO 排出通道。选中的通道从 D_RBOR/D_RBSR 定义的环形缓冲区读取由 fromSPR 写入的数据。
+        values: { "0": "不使用 MFIFO", "1": "保留", "2": "通道 1（VIF1）", "3": "通道 2（GIF）" }
+      - name: STS
+        bits: "5:4"
+        reset: 0
+        desc: 停顿控制源通道。该通道写入存储器时更新 D_STADR。QEMU 已实现，但没有测试覆盖。
+        values: { "0": "无", "1": "通道 5（SIF0）", "2": "通道 8（fromSPR）", "3": "通道 3（fromIPU）" }
+      - name: STD
+        bits: "7:6"
+        reset: 0
+        status: unimplemented
+        desc: 停顿控制排出通道。该通道遇到 refs 标签时，读地址不得超过 D_STADR，否则暂停等待。
+        values: { "0": "无", "1": "通道 1（VIF1）", "2": "通道 2（GIF）", "3": "通道 6（SIF1）" }
+      - name: RCYC
+        bits: "10:8"
+        reset: 0
+        status: unimplemented
+        desc: 释放周期，RELE = 1 时有效。
+        values: { "0": "8 周期", "1": "16 周期", "2": "32 周期", "3": "64 周期", "4": "128 周期", "5": "256 周期", "6–7": "保留" }
+      - { bits: "31:11", name: 保留, reset: 0, desc: 写入时写 0 }
+    ops:
+      - 初始化时写 D_CTRL = 0x00000001（DMAE = 1，不使用 MFIFO 与停顿控制）。
+    source: ["PCSX2 pcsx2/Dmac.h:317（tDMAC_CTRL）", "PCSX2 pcsx2/Dmac.h:32-55", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_STAT
+    addr: 0x1000E010
+    offset: 0x10
+    access: R/W1C, R/W1T
+    reset: 0x00000000
+    brief: 中断状态（低半部写 1 清零）与中断屏蔽（高半部写 1 翻转）
+    desc: >-
+      低 16 位为中断状态位，写 1 清零；高 16 位为对应的中断屏蔽位，写 1 翻转、写 0 不变。
+      当任一状态位与其屏蔽位同时为 1，或 BEIS 为 1 时，DMAC 向 R5900 的 INT1（Cause.IP3）
+      输出中断请求。BEIS 没有屏蔽位。
+    fields:
+      - { bits: "9:0", name: CIS, access: R/W1C, reset: 0, desc: 通道中断状态，第 n 位对应通道 n。通道传输结束（STR 清零）时置 1 }
+      - { bits: "12:10", name: 保留, reset: 0, desc: 写入时写 0 }
+      - { bits: "13", name: SIS, access: R/W1C, reset: 0, status: unimplemented, desc: 停顿中断状态。排出通道因停顿控制而暂停时置 1。QEMU 不会置此位 }
+      - { bits: "14", name: MEIS, access: R/W1C, reset: 0, status: unimplemented, desc: MFIFO 空中断状态。MFIFO 排出通道读空环形缓冲区时置 1。QEMU 不会置此位 }
+      - { bits: "15", name: BEIS, access: R/W1C, reset: 0, status: reference, desc: 总线错误中断状态。访问不存在的地址时置 1，不受屏蔽。QEMU 已实现，但没有测试覆盖 }
+      - { bits: "25:16", name: CIM, access: R/W1T, reset: 0, desc: 通道中断屏蔽，第 n 位为 1 时允许通道 n 的中断 }
+      - { bits: "28:26", name: 保留, reset: 0, desc: 写入时写 0。QEMU 中写 1 会翻转并可读回（按高 16 位统一翻转处理） }
+      - { bits: "29", name: SIM, access: R/W1T, reset: 0, status: unimplemented, desc: 停顿中断屏蔽。QEMU 只保存（SIS 永不置位） }
+      - { bits: "30", name: MEIM, access: R/W1T, reset: 0, status: unimplemented, desc: MFIFO 空中断屏蔽。QEMU 只保存（MEIS 永不置位） }
+      - { bits: "31", name: 保留, reset: 0, desc: 写入时写 0。QEMU 中写 1 会翻转并可读回 }
+    ops:
+      - 清除通道 2 的中断状态：写 0x00000004。写入值的高 16 位必须为 0，否则会翻转屏蔽位。
+      - 允许通道 2 中断：先读 D_STAT，若 CIM2（第 18 位）为 0，写 0x00040000；已为 1 时不要再写，否则会被关闭。
+      - 中断处理程序中读 D_STAT，计算 (D_STAT & (D_STAT >> 16)) & 0x3FF 得到需要处理的通道，处理后写回相应 CIS 位。
+    notes:
+      - 写 D_STAT 时同一次写入可同时清除状态位与翻转屏蔽位，两部分互不影响。
+      - QEMU 中断输出 = ((D_STAT & (D_STAT >> 16)) & 0x7FFF) ≠ 0 或 BEIS = 1。
+      - 测试依据：CIS 的置位与写 1 清零、CIM 的写 1 翻转及 INT1 中断由 qtest ps2/cop0、ps2/dmac/spr、ps2/sif-dma 覆盖。
+    source: ["PCSX2 pcsx2/Dmac.h:340（tDMAC_STAT）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_PCR
+    addr: 0x1000E020
+    offset: 0x20
+    access: R/W
+    reset: 0x00000000
+    brief: 优先级控制与 COP0 条件
+    desc: >-
+      CPC 选择哪些通道参与 COP0 条件信号 CPCOND0 的计算；CDE 与 PCE 用于只允许部分通道工作。
+      CPCOND0 = ((D_STAT.CIS | ~D_PCR.CPC) & 0x3FF) == 0x3FF，即 CPC 选中的通道全部结束（CIS 全为 1）
+      时 CPCOND0 为 1，R5900 可用 BC0T/BC0F 指令据此转移。
+    fields:
+      - { bits: "9:0", name: CPC, reset: 0, desc: COP0 条件通道选择，第 n 位为 1 时通道 n 的 CISn 参与 CPCOND0 }
+      - { bits: "15:10", name: 保留, reset: 0, desc: 写入时写 0 }
+      - { bits: "25:16", name: CDE, reset: 0, status: unimplemented, desc: 通道允许位，PCE = 1 时只有 CDE 对应位为 1 的通道可以工作 }
+      - { bits: "30:26", name: 保留, reset: 0, desc: 写入时写 0 }
+      - name: PCE
+        bits: "31"
+        reset: 0
+        status: unimplemented
+        desc: 优先级控制允许
+        values: { "0": "CDE 无效，全部通道均可工作", "1": "按 CDE 允许通道" }
+    ops:
+      - 用 BC0F 等待通道 2 结束：写 D_PCR = 0x00000004，清除 D_STAT.CIS2，启动通道 2，然后执行 “1：BC0F 1b; NOP”。
+    notes:
+      - 复位后 CPC = 0，此时 CPCOND0 恒为 1。
+    source: ["PCSX2 pcsx2/Dmac.h:371（tDMAC_PCR）", "PCSX2 pcsx2/COP0.cpp:593", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_SQWC
+    addr: 0x1000E030
+    offset: 0x30
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: 交错模式的跳过 / 传输四字数
+    desc: >-
+      SPR 通道交错模式的参数：每传输 TQWC 个四字后，在主存一侧跳过 SQWC 个四字。
+      QEMU 只保存写入值，不实现交错模式。
+    fields:
+      - { bits: "7:0", name: SQWC, reset: 0, desc: 跳过的四字数 }
+      - { bits: "15:8", name: 保留, reset: 0, desc: 写入时写 0 }
+      - { bits: "23:16", name: TQWC, reset: 0, desc: 每次传输的四字数 }
+      - { bits: "31:24", name: 保留, reset: 0, desc: 写入时写 0 }
+    source: ["PCSX2 pcsx2/Dmac.h:391（tDMAC_SQWC）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_RBSR
+    addr: 0x1000E040
+    offset: 0x40
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: MFIFO 环形缓冲区大小（掩码）
+    desc: >-
+      MFIFO 环形缓冲区的地址掩码，值为（缓冲区大小 − 16），缓冲区大小须为 2 的幂。
+      QEMU 只保存写入值。
+    fields:
+      - { bits: "3:0", name: 保留, reset: 0, desc: 写入时写 0 }
+      - { bits: "30:4", name: RMSK, reset: 0, desc: 环形缓冲区掩码 }
+      - { bits: "31", name: 保留, reset: 0, desc: 写入时写 0 }
+    source: ["PCSX2 pcsx2/Dmac.h:410（tDMAC_RBSR）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_RBOR
+    addr: 0x1000E050
+    offset: 0x50
+    access: R/W
+    reset: 0x00000000
+    status: unimplemented
+    brief: MFIFO 环形缓冲区起始地址
+    desc: MFIFO 环形缓冲区在主存中的起始地址，须按缓冲区大小对齐。QEMU 只保存写入值。
+    fields:
+      - { bits: "30:0", name: ADDR, reset: 0, desc: 环形缓冲区起始地址 }
+      - { bits: "31", name: 保留, reset: 0, desc: 写入时写 0 }
+    source: ["PCSX2 pcsx2/Dmac.h:424（tDMAC_RBOR）", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_STADR
+    addr: 0x1000E060
+    offset: 0x60
+    access: R/W
+    reset: 0x00000000
+    status: reference
+    brief: 停顿地址
+    desc: >-
+      停顿控制源通道（D_CTRL.STS）最近写入存储器的地址。普通模式下源通道每写完一个块、
+      目的链模式下遇到 cnts 标签时由 DMAC 更新。排出通道（D_CTRL.STD）处理 refs 标签时以此为上限。
+    fields:
+      - { bits: "30:0", name: ADDR, reset: 0, desc: 停顿地址 }
+      - { bits: "31", name: 保留, reset: 0, desc: 写入时写 0 }
+    notes:
+      - QEMU 在 STS 源通道的目的链传输中更新 D_STADR，但排出通道不据此暂停（refs 按 ref 处理）。
+      - QEMU 已实现，但没有测试覆盖。
+    source: ["PCSX2 pcsx2/Hw.h:301", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_ENABLER
+    addr: 0x1000F520
+    offset: 0x20
+    access: RO
+    reset: 0x00001201
+    status: unimplemented
+    brief: DMA 挂起状态（读）
+    desc: >-
+      D_ENABLEW 的只读副本。CPND 为 1 表示全部通道处于挂起状态。
+      BIOS 在修改通道寄存器前通常先置 CPND，修改完再清除。
+    fields:
+      - { bits: "15:0", name: 保留, reset: 0x1201, desc: 含义不明，复位值来自 QEMU 模型 }
+      - { bits: "16", name: CPND, reset: 0, status: unimplemented, desc: 为 1 表示全部 DMA 挂起 }
+      - { bits: "31:17", name: 保留, reset: 0, desc: 读出为 0 }
+    notes:
+      - QEMU 中读 D_ENABLER 返回 D_ENABLEW 的保存值；写 D_ENABLER 被忽略并记录 LOG_UNIMP。
+    source: ["PCSX2 pcsx2/Hw.h:329", "PCSX2 pcsx2/Dmac.cpp:546", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]
+
+  - name: D_ENABLEW
+    addr: 0x1000F590
+    offset: 0x90
+    access: R/W
+    reset: 0x00001201
+    status: unimplemented
+    brief: DMA 挂起控制（写）
+    desc: >-
+      第 16 位 CPND 置 1 时挂起全部通道（正在进行的传输暂停，新的传输不启动），清零后恢复。
+      写入值同时反映到 D_ENABLER。
+    fields:
+      - { bits: "15:0", name: 保留, reset: 0x1201, desc: 保持读出值写回 }
+      - { bits: "16", name: CPND, reset: 0, status: unimplemented, desc: 为 1 时挂起全部 DMA。QEMU 只保存，不挂起传输 }
+      - { bits: "31:17", name: 保留, reset: 0, desc: 写入时写 0 }
+    ops:
+      - 挂起：读 D_ENABLER，将读出值或上 0x00010000 后写入 D_ENABLEW。
+      - 恢复：将读出值清除第 16 位后写入 D_ENABLEW。
+    notes:
+      - QEMU 只保存写入值（复位值 0x1201），并经 D_ENABLER 读回，不挂起传输。
+    source: ["PCSX2 pcsx2/Hw.h:330", "PCSX2 pcsx2/Dmac.cpp:546-551", "PCSX2 pcsx2/Dmac.cpp:187", "ps2tek §EE DMAC", "QEMU hw/dma/ps2_dmac.c"]

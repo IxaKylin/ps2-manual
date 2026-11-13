@@ -1,0 +1,276 @@
+# IOP R3000A 系统控制协处理器 COP0 寄存器。格式说明见 docs/data/SCHEMA.md。
+# CP0 寄存器没有总线地址，offset 写 CP0 寄存器编号（MFC0/MTC0 指令的 rd 字段）。
+# 编号不是地址，故 verified 寄存器均以 check 跳过地址核对。
+block: iop-cop0
+title: IOP 核心 COP0 寄存器
+page: /chapters/12-iop
+access_size: 32 位，仅 MFC0/MTC0（R3000A 没有 select 字段，sel ≠ 0 为保留指令）
+width: 32
+status: verified
+qemu:
+  files:
+    - target/mips/cpu.h
+    - target/mips/cpu.c
+    - target/mips/cpu-defs.c.inc
+    - target/mips/internal.h
+    - target/mips/system/cp0.c
+    - target/mips/tcg/translate.c
+    - target/mips/tcg/system/tlb_helper.c
+    - target/mips/tcg/system/special_helper.c
+    - hw/mips/ps2_iop.c
+registers:
+  - name: BPC
+    offset: 3
+    access: R/W
+    status: unimplemented
+    brief: 指令断点地址
+    desc: >-
+      硬件断点的指令地址。DCIC 允许指令断点（PCE）时，取指地址与 BPC 在 BPCM 为 1 的位上相同即命中断点。
+    notes:
+      - QEMU 只保存写入值并可读回（r3000a/cpu 测试写入 0x11110000 后读回），不产生断点异常。
+    source: ["ps2sdk common/include/iop_cop0_defs.h:22", "QEMU target/mips/tcg/translate.c（gen_cp0_r3000）"]
+
+  - name: BDA
+    offset: 5
+    access: R/W
+    status: unimplemented
+    brief: 数据断点地址
+    desc: >-
+      硬件断点的数据地址。DCIC 允许数据断点（DAE 及 DR/DW）时，访存地址与 BDA 在 BDAM 为 1 的位上相同即命中断点。
+    notes:
+      - QEMU 只保存写入值并可读回，不产生断点异常。
+    source: ["ps2sdk common/include/iop_cop0_defs.h:23", "QEMU target/mips/tcg/translate.c（gen_cp0_r3000）"]
+
+  - name: JUMPDEST
+    offset: 6
+    access: RO
+    status: unimplemented
+    brief: 最近一次跳转的目标地址（来源不确定）
+    desc: >-
+      PS1 资料中把 CP0 寄存器 6 称为 JUMPDEST，记录最近一次跳转的目标地址，供调试使用。本项目使用的
+      PCSX2、ps2sdk 与 ps2tek 均未描述该寄存器，含义的来源不确定。
+    notes:
+      - QEMU 不解码 CP0 寄存器 6：MFC0 读出 0xFFFFFFFF，MTC0 写入被忽略，并记录 LOG_UNIMP。
+    source: ["QEMU target/mips/tcg/translate.c（gen_cp0_r3000、gen_mfc0_unimplemented）"]
+
+  - name: DCIC
+    offset: 7
+    access: R/W
+    status: unimplemented
+    brief: 断点控制与调试状态
+    desc: >-
+      调试与缓存控制寄存器：高半部为断点、跟踪功能的允许位，低 6 位为命中时由 CPU 置 1 的状态位，
+      第 15:12 位与缓存行无效化有关。下表位定义取自 ps2sdk 的 IOP COP0 定义文件，本项目未验证。
+    fields:
+      - { bits: "0", name: DB, desc: 调试事件已发生，由 CPU 置 1 }
+      - { bits: "1", name: PC, desc: 指令断点命中，由 CPU 置 1 }
+      - { bits: "2", name: DA, desc: 数据断点命中，由 CPU 置 1 }
+      - { bits: "3", name: R, desc: 数据断点由读访问命中，由 CPU 置 1 }
+      - { bits: "4", name: W, desc: 数据断点由写访问命中，由 CPU 置 1 }
+      - { bits: "5", name: T, desc: 跟踪事件，由 CPU 置 1 }
+      - { bits: "11:6", name: 保留, desc: 写入时写 0 }
+      - { bits: "12", name: I, desc: 指令缓存无效化允许 }
+      - { bits: "13", name: D, desc: 数据缓存无效化允许 }
+      - { bits: "14", name: IL, desc: 指令缓存行无效化 }
+      - { bits: "15", name: DL, desc: 数据缓存行无效化 }
+      - { bits: "22:16", name: 保留, desc: 写入时写 0 }
+      - { bits: "23", name: DE, desc: 调试功能总允许 }
+      - { bits: "24", name: PCE, desc: 指令断点允许 }
+      - { bits: "25", name: DAE, desc: 数据地址断点允许 }
+      - { bits: "26", name: DR, desc: 读访问触发数据断点 }
+      - { bits: "27", name: DW, desc: 写访问触发数据断点 }
+      - { bits: "28", name: TE, desc: 跟踪允许 }
+      - { bits: "29", name: KD, desc: 内核态调试允许 }
+      - { bits: "30", name: UD, desc: 用户态调试允许 }
+      - { bits: "31", name: TR, desc: 陷阱允许 }
+    notes:
+      - QEMU 只保存写入值并可读回，所有位都没有作用。
+    source: ["ps2sdk common/include/iop_cop0_defs.h:24, 30-68", "QEMU target/mips/tcg/translate.c（gen_cp0_r3000）"]
+
+  - name: BadVaddr
+    offset: 8
+    check: CP0 寄存器编号，无总线地址
+    access: RO
+    brief: 出错的虚拟地址
+    desc: >-
+      发生地址错误异常（AdEL、AdES）时，记录出错的虚拟地址。R3000A 没有 TLB，因此不会因 TLB 异常写入该寄存器。
+    notes:
+      - r3000a/cpu 测试在用户态访问 KSEG 地址产生 AdEL/AdES，检查 BadVaddr 等于出错地址。
+    source: ["ps2sdk common/include/iop_cop0_defs.h:25", "QEMU target/mips/tcg/system/tlb_helper.c", "QEMU tests/qtest/r3000a-test.c"]
+
+  - name: BDAM
+    offset: 9
+    access: R/W
+    status: unimplemented
+    brief: 数据断点地址掩码
+    desc: 数据断点比较掩码，为 1 的位参与 BDA 比较。
+    notes:
+      - CP0 寄存器 9 在 R4000 以后的 CPU 上是 Count。QEMU 中 R3000A 的寄存器 9 只保存写入值，不计数，也没有 Compare 定时器中断。
+    source: ["ps2sdk common/include/iop_cop0_defs.h:26", "QEMU target/mips/tcg/translate.c（gen_cp0_r3000）"]
+
+  - name: BPCM
+    offset: 11
+    access: R/W
+    status: unimplemented
+    brief: 指令断点地址掩码
+    desc: 指令断点比较掩码，为 1 的位参与 BPC 比较。
+    notes:
+      - CP0 寄存器 11 在 R4000 以后的 CPU 上是 Compare。QEMU 中只保存写入值，没有作用。
+    source: ["ps2sdk common/include/iop_cop0_defs.h:27", "QEMU target/mips/tcg/translate.c（gen_cp0_r3000）"]
+
+  - name: SR
+    offset: 12
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00400000
+    brief: 状态寄存器：KU/IE 三级栈、中断屏蔽、缓存隔离、BEV、CU0
+    desc: >-
+      R3000A 的状态寄存器（MIPS 文档中称 Status）。与 R4000 以后的 CPU 不同，它没有 EXL/ERL 位，
+      而用第 5:0 位构成“当前 / 上一级 / 更早一级”三级栈保存中断允许位 IE 与内核/用户态位 KU：
+      进入异常时整体左移 2 位（当前级清零，即进入内核态并关中断），RFE 指令右移 2 位恢复。
+      第 16 位 IsC 用于隔离数据缓存，供 IOP 内核清除指令缓存。复位值只有 BEV 为 1。
+    fields:
+      - name: IEc
+        bits: "0"
+        reset: 0
+        desc: 当前中断允许。为 1 且 Cause.IP 与 IM 有同为 1 的位时响应中断。QEMU 中只由 IEc 决定中断是否允许
+        values: { "0": "禁止中断", "1": "允许中断" }
+      - name: KUc
+        bits: "1"
+        reset: 0
+        desc: 当前态。为 1 时处于用户态：访问 KSEG0/KSEG1/KSEG2 产生地址错误异常，CU0 = 0 时执行 COP0 指令产生协处理器不可用异常
+        values: { "0": "内核态", "1": "用户态" }
+      - { bits: "2", name: IEp, reset: 0, desc: 上一级中断允许，进入异常时由 IEc 移入 }
+      - { bits: "3", name: KUp, reset: 0, desc: 上一级内核/用户态，进入异常时由 KUc 移入 }
+      - { bits: "4", name: IEo, reset: 0, desc: 更早一级中断允许，进入异常时由 IEp 移入；RFE 不改变此位 }
+      - { bits: "5", name: KUo, reset: 0, desc: 更早一级内核/用户态，进入异常时由 KUp 移入；RFE 不改变此位 }
+      - { bits: "7:6", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - name: IM
+        bits: "15:8"
+        reset: 0
+        desc: 中断屏蔽，第 8+n 位对应 Cause.IPn。IM0/IM1 对应软件中断，IM2 对应 IOP INTC 的中断请求（IP2）
+      - name: IsC
+        bits: "16"
+        reset: 0
+        desc: >-
+          隔离缓存。为 1 时对存储器的写入只进入数据缓存，不到达存储器。IOP 内核清除指令缓存时置此位，
+          再配合缓存控制寄存器写存储器。QEMU 中 IsC = 1 时写 RAM 或 ROM 被丢弃，读仍从存储器读出，写 MMIO 不受影响
+      - name: SwC
+        bits: "17"
+        reset: 0
+        status: unimplemented
+        desc: 交换缓存，为 1 时指令缓存与数据缓存互换角色。QEMU 保存此位，但没有缓存模型，无作用
+      - name: 保留
+        bits: "21:18"
+        access: RO
+        reset: 0
+        status: unimplemented
+        desc: R3000 文档中为奇偶校验与缓存状态相关位，具体定义来源不确定。QEMU 中不可写，读出为 0
+      - name: BEV
+        bits: "22"
+        reset: 1
+        desc: 启动异常向量。为 1 时异常进入 0xBFC00180（ROM），为 0 时进入 0x80000080（IOP 内存）
+        values: { "0": "0x80000080", "1": "0xBFC00180" }
+      - { bits: "27:23", name: 保留, access: RO, reset: 0, desc: QEMU 中不可写，读出为 0 }
+      - name: CU0
+        bits: "28"
+        reset: 0
+        desc: COP0 可用。为 1 时用户态也可执行 COP0 指令；内核态总可使用 COP0
+      - { bits: "31:29", name: CU1–CU3, access: RO, reset: 0, desc: 协处理器 1–3 可用位。QEMU 中不可写，读出为 0 }
+    ops:
+      - 关中断：MTC0 写入清除 IEc 的值；开中断：置 IEc，并在 IM 中置 IM2（第 10 位）。
+      - 中断处理程序返回：`jr k1` 的延迟槽中放 `rfe`，k1 中预先放入 EPC（或其后一条指令的地址）。
+      - 切换到 RAM 异常向量：先把异常入口代码复制到 IOP 内存 0x80 处，再写 SR 使 BEV = 0，之后的异常进入 0x80000080。
+    notes:
+      - QEMU 可写位掩码为 0x1043FF3F（CU0、BEV、SwC、IsC、IM、KU/IE 三级栈）；r3000a/cpu 测试写入 0xFFFFFFFC 读回 0x1043FF3C。
+      - RFE 只恢复第 3:0 位（`(SR & ~0xF) | ((SR >> 2) & 0xF)`），KUo/IEo 保持不变。
+      - IsC 改变时 QEMU 刷新 TLB 缓存的写映射，因此切换后立即生效。
+    source:
+      - "QEMU target/mips/cpu-defs.c.inc（R3000A，CP0_Status_rw_bitmask）"
+      - "QEMU target/mips/system/cp0.c（cpu_mips_store_status）"
+      - "QEMU target/mips/tcg/system/tlb_helper.c（r3000_enter_exception、r3000_store_isolated）"
+      - "QEMU target/mips/tcg/system/special_helper.c（helper_rfe）"
+      - "QEMU tests/qtest/r3000a-test.c"
+      - "PCSX2 pcsx2/R3000A.cpp:42（复位值）、pcsx2/R3000A.cpp:78-85（异常入口）"
+      - "PCSX2 pcsx2/IopMem.cpp:285（IsC 时写入不到达存储器）"
+
+  - name: CAUSE
+    offset: 13
+    check: CP0 寄存器编号，无总线地址
+    access: R/W
+    reset: 0x00000000
+    brief: 异常原因、待处理中断、分支延迟槽标志
+    desc: >-
+      记录最近一次异常的原因。进入异常时 CPU 写入 ExcCode、BD 与 CE；IP 反映外部与软件中断请求。
+      只有 IP1:IP0 两个软件中断位可写。
+    fields:
+      - { bits: "1:0", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - name: ExcCode
+        bits: "6:2"
+        access: RO
+        reset: 0
+        desc: 异常代码。R3000A 没有 TLB，不会出现 TLB 相关代码 1–3
+        values:
+          "0": "Int：中断"
+          "4": "AdEL：取指或读数据地址错误"
+          "5": "AdES：写数据地址错误"
+          "6": "IBE：取指总线错误"
+          "7": "DBE：数据总线错误"
+          "8": "Sys：SYSCALL"
+          "9": "Bp：BREAK"
+          "10": "RI：保留指令"
+          "11": "CpU：协处理器不可用"
+          "12": "Ov：算术溢出"
+      - { bits: "7", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - { bits: "9:8", name: IP1–IP0, access: R/W, reset: 0, desc: 软件中断请求，写 1 申请中断，写 0 撤销 }
+      - name: IP7–IP2
+        bits: "15:10"
+        access: RO
+        reset: 0
+        desc: 外部中断请求。IP2（第 10 位）由 IOP INTC 驱动，条件为 I_CTRL.0 = 1 且 (I_STAT & I_MASK) ≠ 0；IOP 上 IP3–IP7 没有中断源
+      - { bits: "27:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - { bits: "29:28", name: CE, access: RO, reset: 0, desc: 协处理器不可用异常（CpU）时所涉及的协处理器编号 }
+      - { bits: "30", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+      - name: BD
+        bits: "31"
+        access: RO
+        reset: 0
+        desc: 分支延迟。为 1 表示异常指令位于分支延迟槽中，此时 EPC 指向分支指令
+    ops:
+      - 中断处理程序中读 CAUSE，ExcCode = (CAUSE >> 2) & 0x1F 为 0 时是中断，再读 I_STAT & I_MASK 确定中断源。
+    notes:
+      - QEMU 中 MTC0 只写入第 9:8 位；r3000a/cpu 测试写入 0xFFFFFFFF 读回 0x00000300。
+      - r3000a/cpu 测试覆盖 Int、AdEL、AdES、Sys、Bp、RI、CpU 七种异常与 BD 位；ps2/iop-intc 检查 IP2 随 I_CTRL、I_MASK 变化。
+    source:
+      - "QEMU target/mips/system/cp0.c（cpu_mips_store_cause）"
+      - "QEMU target/mips/tcg/system/tlb_helper.c（mips_cpu_do_interrupt、r3000_enter_exception）"
+      - "QEMU tests/qtest/r3000a-test.c、tests/qtest/ps2-test.c（test_iop_intc）"
+      - "ps2sdk common/include/iop_cop0_defs.h:19, 71"
+      - "ps2tek §IOP Interrupts"
+
+  - name: EPC
+    offset: 14
+    check: CP0 寄存器编号，无总线地址
+    access: RO
+    brief: 异常返回地址
+    desc: >-
+      进入异常时写入引起异常的指令地址；若该指令在分支延迟槽中（CAUSE.BD = 1），写入分支指令的地址。
+      中断处理结束后跳回 EPC 继续执行；SYSCALL、BREAK 处理程序通常跳回 EPC + 4。
+    source: ["QEMU target/mips/tcg/system/tlb_helper.c（r3000_enter_exception）", "QEMU tests/qtest/r3000a-test.c", "PCSX2 pcsx2/R3000A.cpp:68-76"]
+
+  - name: PRID
+    offset: 15
+    check: CP0 寄存器编号，无总线地址
+    access: RO
+    reset: 0x0000001F
+    brief: 处理器标识，IOP 为 0x1F
+    desc: >-
+      处理器型号与版本。IOP 读出 0x0000001F，EE（R5900）读出 0x00002E20。两颗 CPU 从同一 ROM 的
+      0xBFC00000 开始执行，ROM 中的启动代码读 PRID 区分自己运行在哪颗 CPU 上。
+    fields:
+      - { bits: "7:0", name: Rev, access: RO, reset: 0x1F, desc: 版本号 }
+      - { bits: "15:8", name: Imp, access: RO, reset: 0x00, desc: 实现号 }
+      - { bits: "31:16", name: 保留, access: RO, reset: 0, desc: 读出为 0 }
+    notes:
+      - ps2/prid-split 测试用同一 ROM 启动两颗 CPU，检查 IOP 读出 0x1F；r3000a/cpu 测试同样检查该值。
+    source: ["QEMU target/mips/cpu-defs.c.inc（R3000A，CP0_PRid）", "PCSX2 pcsx2/R3000A.cpp:43", "QEMU tests/qtest/ps2-test.c（test_prid_split）"]

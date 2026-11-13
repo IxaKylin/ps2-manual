@@ -1,0 +1,157 @@
+# DVE（视频编码器）串行端口寄存器。格式说明见 docs/data/SCHEMA.md。
+#
+# offset 相对于 base 0x1A000000，与 QEMU hw/display/ps2_dve.c 中的 REG16() 一致。
+# 该端口位于 EE 物理地址 0x1A000000（PCSX2 中以 KSEG1 地址 0xBA000000 称呼），是一个简单的串行总线主控，
+# 经它读写视频编码器芯片的内部寄存器。公开资料很少，位定义依据 PCSX2 的模拟与 Sony BIOS 的访问方式。
+block: dve
+title: DVE 视频编码器串行端口
+page: /chapters/14-peripherals
+base: 0x1A000000
+size: 0x20
+bus: EE 总线
+access_size: 只接受 16 位访问；其他宽度的访问被拒绝：CPU 访问产生总线错误（DBE），qtest 读出 0
+width: 16
+status: verified
+qemu:
+  files: [include/hw/display/ps2_dve.h, hw/display/ps2_dve.c, hw/mips/ps2.c]
+registers:
+  - name: DVE_CMD
+    addr: 0x1A000000
+    offset: 0x00
+    access: R/W
+    reset: 0x0000
+    brief: 命令：传输字节数与启动位
+    desc: >-
+      命令寄存器。写入 START = 1 时按 DVE_ADDR 与 COUNT 执行一次传输；QEMU 中传输立即完成，
+      结果写入 DVE_STAT。START 位不会自动清零，读出为写入值。不含 START 的写入只保存。
+    fields:
+      - { bits: "3:0", name: COUNT, reset: 0, desc: "传输字节数。QEMU 支持写 1 字节（选择寄存器）、写 2 字节（选择并写入寄存器）和读 1 字节；其他字节数只置 DONE，不传送数据，并记录 LOG_UNIMP" }
+      - { bits: "6:4", name: 未知, reset: 0, status: unimplemented, desc: 含义不明，QEMU 只保存 }
+      - { bits: "7", name: START, reset: 0, desc: "写 1 启动传输。QEMU 不自动清零" }
+      - { bits: "15:8", name: 未知, reset: 0, status: unimplemented, desc: 含义不明，QEMU 只保存 }
+    source:
+      - "PCSX2 pcsx2/Memory.cpp:273-306"
+      - "QEMU hw/display/ps2_dve.c（ps2_dve_cmd_post_write、ps2_dve_xfer）"
+
+  - name: DVE_ADDR
+    addr: 0x1A000002
+    offset: 0x02
+    access: R/W
+    reset: 0x0000
+    brief: 串行总线地址字节：0x42 写、0x43 读
+    desc: >-
+      串行总线上的器件地址字节，最低位为读写方向。QEMU 中只有 0x42（写）与 0x43（读）两个地址有应答，
+      即 7 位器件地址 0x21；其他地址使传输以 NACK 结束。
+    fields:
+      - name: ADDR
+        bits: "7:0"
+        reset: 0
+        desc: 器件地址与方向
+        values: { "0x42": "写视频编码器", "0x43": "读视频编码器", "其他": "无应答，DVE_STAT 置 NACK 与 DONE" }
+      - { bits: "15:8", name: 未知, reset: 0, desc: 写入非 0 值时地址不匹配，传输无应答 }
+    notes:
+      - PCSX2 把 0x43 当作写、0x42 当作读（Memory.cpp:282、297），与 QEMU 相反；QEMU 依 Sony BIOS 的访问顺序采用 0x42 写、0x43 读，这也与串行总线“最低位为 1 表示读”的通常约定一致。
+      - PCSX2 对地址 0x4F、0x41 报告错误（Memory.cpp:275-279）。
+    source:
+      - "PCSX2 pcsx2/Memory.cpp:275-297"
+      - "QEMU hw/display/ps2_dve.c（PS2_DVE_ADDR_WRITE、PS2_DVE_ADDR_READ）"
+
+  - name: DVE_UNK04
+    addr: 0x1A000004
+    offset: 0x04
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    nodetail: true
+    brief: 含义不明；QEMU 只保存并记录 LOG_UNIMP
+    source: ["QEMU hw/display/ps2_dve.c"]
+
+  - name: DVE_STAT
+    addr: 0x1A000006
+    offset: 0x06
+    access: R/W
+    reset: 0x0000
+    brief: 传输状态：完成、无应答；任何写入清除这两位
+    desc: >-
+      传输状态。每次传输结束 DONE 置 1；器件无应答或 DVE 未上电时 NACK 同时置 1。
+      向该寄存器写任何值都只清除 NACK 与 DONE，其余位保持不变。
+    fields:
+      - { bits: "0", name: NACK, reset: 0, desc: "无应答 / 出错：DVE_POWER.ON 为 0，或 DVE_ADDR 不是 0x42、0x43" }
+      - { bits: "1", name: DONE, reset: 0, desc: 传输结束 }
+      - { bits: "15:2", name: 未知, reset: 0, status: unimplemented, desc: 含义不明，QEMU 中写入不改变这些位 }
+    ops:
+      - 写 DVE_STAT（任意值）清除上次结果，再写 DVE_CMD 启动，然后查询 DONE；DONE = 1 后检查 NACK。
+    notes:
+      - PCSX2 读 DVE_STAT 时在若干次读之后才给出 DONE；QEMU 立即给出。
+    source:
+      - "PCSX2 pcsx2/Memory.cpp:266-268、318-336"
+      - "QEMU hw/display/ps2_dve.c（ps2_dve_stat_pre_write）"
+
+  - name: DVE_UNK08
+    addr: 0x1A000008
+    offset: 0x08
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    nodetail: true
+    brief: 含义不明；QEMU 只保存并记录 LOG_UNIMP
+    source: ["QEMU hw/display/ps2_dve.c"]
+
+  - name: DVE_POWER
+    addr: 0x1A00000A
+    offset: 0x0A
+    access: R/W
+    reset: 0x0001
+    brief: 视频编码器电源（第 0 位为 1 表示上电）
+    desc: >-
+      视频编码器的电源 / 待机控制。ON 为 0 时一切传输以 NACK 结束，编码器内部寄存器保持不变。
+      复位后为 1。
+    fields:
+      - name: ON
+        bits: "0"
+        reset: 1
+        desc: 电源
+        values: { "0": "关闭（待机），传输无应答", "1": "上电" }
+      - { bits: "15:1", name: 未知, reset: 0, status: unimplemented, desc: 含义不明，QEMU 只保存 }
+    notes:
+      - PCSX2 把写入值为 0 视为出错，其余值视为上电，并注明含义不确定（Memory.cpp:308-316）。
+    source:
+      - "PCSX2 pcsx2/Memory.cpp:308-316"
+      - "QEMU hw/display/ps2_dve.c（R_POWER_ON_MASK）"
+
+  - name: DVE_DATA0
+    addr: 0x1A000010
+    offset: 0x10
+    access: R/W
+    reset: 0x0000
+    brief: 数据 0：写传输时为寄存器号，读传输后为读出的值
+    desc: >-
+      数据端口的第一个字。写 1 字节或 2 字节时，其低 8 位作为编码器的寄存器号（保存为当前寄存器号）；
+      读 1 字节后，当前寄存器的值（8 位）存入此处。传输失败时不改变。
+    source:
+      - "PCSX2 pcsx2/Memory.cpp:284-301"
+      - "QEMU hw/display/ps2_dve.c（ps2_dve_xfer）"
+
+  - name: DVE_DATA1
+    addr: 0x1A000012
+    offset: 0x12
+    access: R/W
+    reset: 0x0000
+    brief: 数据 1：写 2 字节时写入当前寄存器的值（低 8 位）
+    desc: >-
+      写 2 字节传输时，其低 8 位写入 DVE_DATA0 所选的编码器寄存器。编码器有 256 个 8 位寄存器，QEMU 只保存，
+      不按寄存器内容改变视频输出；系统复位时清零。
+    source:
+      - "PCSX2 pcsx2/Memory.cpp:288-292"
+      - "QEMU hw/display/ps2_dve.c（ps2_dve_xfer）"
+
+  - name: DVE_DATA2_7
+    addr: 0x1A000014
+    offset: 0x14
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    check: "DATA2–DATA7 由宏 PS2_DVE_DATA(n) 按 A_DATA0 + 2n 生成，没有单独的 REG16 定义"
+    nodetail: true
+    brief: 数据 2–7（0x1A000014–0x1A00001E）；QEMU 只保存，不参与传输
+    source: ["PCSX2 pcsx2/Memory.cpp:287-292", "QEMU hw/display/ps2_dve.c（PS2_DVE_DATA）"]

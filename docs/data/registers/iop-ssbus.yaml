@@ -1,0 +1,72 @@
+# IOP SSBUS 总线配置寄存器与 ICFG。格式说明见 docs/data/SCHEMA.md。
+#
+# SSBUS 寄存器分两组，各 9 个字：第一组 0x1F801000–0x1F801023，第二组 0x1F801400–0x1F801423。
+# 寄存器名取自 PCSX2 的 IOP 硬件地址定义。QEMU 只保存写入值，不影响总线时序，
+# 因此按状态规则记为未实现。offset 为相对于所在组基地址的偏移。本块不写 base。
+block: iop-ssbus
+title: IOP SSBUS 总线配置
+page: /chapters/12-iop
+bus: IOP 总线
+access_size: 8、16 或 32 位；窄读取出相应字节，窄写与其余字节合并
+width: 32
+status: unimplemented
+qemu:
+  files: [include/hw/misc/ps2_iop_ssbus.h, hw/misc/ps2_iop_ssbus.c, hw/mips/ps2_iop.c]
+registers:
+  - { name: SPD_ADDR, addr: 0x1F801000, offset: 0x00, access: R/W, reset: 0x00000000, nodetail: true, brief: SPEED（DEV9）窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:21"] }
+  - { name: PIO_ADDR, addr: 0x1F801004, offset: 0x04, access: R/W, reset: 0x00000000, nodetail: true, brief: PIO 窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:22"] }
+  - { name: SPD_DELAY, addr: 0x1F801008, offset: 0x08, access: R/W, reset: 0x00000000, nodetail: true, brief: SPEED 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:23"] }
+  - { name: DEV1_DELAY, addr: 0x1F80100C, offset: 0x0C, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV1 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:24"] }
+  - { name: ROM_DELAY, addr: 0x1F801010, offset: 0x10, access: R/W, reset: 0x00000000, nodetail: true, brief: Boot ROM 访问时序（BIOS 写 0x0016244F）, source: ["PCSX2 pcsx2/IopHw.h:25"] }
+  - { name: SPU_DELAY, addr: 0x1F801014, offset: 0x14, access: R/W, reset: 0x00000000, nodetail: true, brief: SPU2 访问时序, source: ["PCSX2 pcsx2/IopHw.h:26"] }
+  - { name: DEV5_DELAY, addr: 0x1F801018, offset: 0x18, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV5 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:27"] }
+  - { name: PIO_DELAY, addr: 0x1F80101C, offset: 0x1C, access: R/W, reset: 0x00000000, nodetail: true, brief: PIO 访问时序, source: ["PCSX2 pcsx2/IopHw.h:28"] }
+  - { name: COM_DELAY, addr: 0x1F801020, offset: 0x20, access: R/W, reset: 0x00000000, nodetail: true, brief: 公共访问时序, source: ["PCSX2 pcsx2/IopHw.h:29"] }
+  - { name: DEV1_ADDR, addr: 0x1F801400, offset: 0x00, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV1 窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:42"] }
+  - { name: SPU_ADDR, addr: 0x1F801404, offset: 0x04, access: R/W, reset: 0x00000000, nodetail: true, brief: SPU2 窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:43"] }
+  - { name: DEV5_ADDR, addr: 0x1F801408, offset: 0x08, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV5 窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:44"] }
+  - { name: SPU1_ADDR, addr: 0x1F80140C, offset: 0x0C, access: R/W, reset: 0x00000000, nodetail: true, brief: 第二个 SPU 窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:45"] }
+  - { name: DEV9_ADDR3, addr: 0x1F801410, offset: 0x10, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV9 第 3 窗口基地址, source: ["PCSX2 pcsx2/IopHw.h:46"] }
+  - { name: SPU1_DELAY, addr: 0x1F801414, offset: 0x14, access: R/W, reset: 0x00000000, nodetail: true, brief: 第二个 SPU 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:47"] }
+  - { name: DEV9_DELAY2, addr: 0x1F801418, offset: 0x18, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV9 第 2 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:48"] }
+  - { name: DEV9_DELAY3, addr: 0x1F80141C, offset: 0x1C, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV9 第 3 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:49"] }
+  - { name: DEV9_DELAY1, addr: 0x1F801420, offset: 0x20, access: R/W, reset: 0x00000000, nodetail: true, brief: DEV9 第 1 窗口访问时序, source: ["PCSX2 pcsx2/IopHw.h:50"] }
+
+  - name: ICFG
+    addr: 0x1F801450
+    access: R/W
+    reset: 0x00000000
+    status: verified
+    brief: IOP 配置；第 1 位向 EE 发出 SBUS 中断
+    desc: >-
+      IOP 配置寄存器。IOP 在偏移 0 处以半字或字写入且第 1 位为 1 时，向 EE INTC 第 1 位（SBUS）发出一次中断，
+      SIF 层借此通知 EE 有新的 SIF 数据或命令。第 0 位与缓存有关，ps2sdk 在清除指令缓存期间把它清零。
+    fields:
+      - name: CACHE
+        bits: "0"
+        reset: 0
+        status: unimplemented
+        desc: 与 IOP 缓存相关的控制位（具体含义来源不确定）。ps2sdk 的 FlushIcache 在清除指令缓存前清零、结束后恢复。QEMU 只保存
+      - name: SBUS_IRQ
+        bits: "1"
+        reset: 0
+        desc: 在偏移 0 处以半字或字写入此位为 1 时，向 EE 发出 SBUS 中断（脉冲）。写入值被保存，读出为最后写入的值；字节写入或写高半字不产生中断
+      - { bits: "30:2", name: 保留, reset: 0, desc: QEMU 保存写入值，无作用 }
+      - name: IOP_TYPE
+        bits: "31"
+        reset: 0
+        status: unimplemented
+        desc: ps2sdk 定义的 IOP 类型标志（与 GM 接口相关）。QEMU 不会自行置位，只保存写入值
+    ops:
+      - 通知 EE：读 ICFG，写 ICFG | 2，再写回不含第 1 位的值（ps2sdk 的 sceSifIntrMain 先置位后清除）。
+    notes:
+      - ps2/iop-ssbus 测试检查半字与字写入第 1 位时 EE INTC 第 1 位置 1，字节写入与写高半字不产生中断，复位后读出 0；Sony BIOS 启动时 IOP 的 SIF 初始化经此中断与 EE 握手。
+      - 第 31 位的定义见 ps2sdk iop_regs.h，本项目未验证。
+    source:
+      - "QEMU hw/misc/ps2_iop_ssbus.c（ps2_iop_icfg_write）"
+      - "QEMU tests/qtest/ps2-test.c（test_iop_ssbus）"
+      - "PCSX2 pcsx2/IopHw.h:52"
+      - "PCSX2 pcsx2/ps2/Iop/IopHwWrite.cpp:289-294"
+      - "ps2sdk iop/system/sifman/src/sifman.c:512-521"
+      - "ps2sdk iop/system/loadcore/src/loadcore.c:1424-1432, 1473"
+      - "ps2sdk common/include/iop_regs.h:439-441"

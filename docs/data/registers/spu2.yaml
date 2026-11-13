@@ -1,0 +1,250 @@
+# SPU2 声音处理器寄存器（只列主要的每核心寄存器）。格式说明见 docs/data/SCHEMA.md。
+#
+# 地址为 IOP 物理地址，给出核心 0 的地址；核心 1 的同名寄存器地址加 0x400。
+# offset 相对于 base 0x1F900000，与 QEMU 头文件中的 PS2_SPU2_xxx 常量一致。
+# 地址类寄存器（IRQA、TSA）由两个 16 位半字组成：低地址半字为地址的高位，高地址半字为低 16 位。
+# 声部（voice）寄存器在第 14 章以表格汇总，不逐个列出。
+block: spu2
+title: SPU2 声音处理器
+page: /chapters/14-peripherals
+base: 0x1F900000
+size: 0x800
+bus: IOP 总线
+access_size: 16 位（其他宽度的访问被忽略，读出为 0）
+width: 16
+status: verified
+qemu:
+  files: [include/hw/audio/ps2_spu2.h, hw/audio/ps2_spu2.c, hw/mips/ps2.c]
+registers:
+  - name: SPU2_ATTR
+    addr: 0x1F90019A
+    offset: 0x19A
+    access: R/W
+    reset: 0x0000
+    brief: 核心属性：DMA 模式、中断允许、效果允许等（核心 1：0x1F90059A）
+    desc: >-
+      核心属性寄存器。QEMU 使用其中两个位域：DMA_MODE 不为 0 时核心处于 DMA 模式，由 0 变为非 0 时
+      SPU2_STATX.READY 置 1；DMA_MODE 写为 0 且 SPU2_STATX.BUSY 为 0 时 READY 清零。IRQ_EN 控制该核心的
+      IRQA 中断；由 1 写为 0 时同时清除 SPU2_IRQINFO 中该核心的标志。其余位只保存。
+    fields:
+      - { bits: "0", name: 未知, reset: 0, status: unimplemented, desc: "含义不明（PCSX2 称 AttrBit0）" }
+      - { bits: "3:1", name: DMA_BITS, reset: 0, status: unimplemented, desc: "与 DMA 有关的位，含义不明；PCSX2 在置位时输出警告" }
+      - { bits: "5:4", name: DMA_MODE, reset: 0, desc: "DMA / 传输模式。0 表示不在 DMA 模式；非 0 值的具体含义 QEMU 不区分（PCSX2 也从 IOP DMA 的方向判断传送方向）" }
+      - name: IRQ_EN
+        bits: "6"
+        reset: 0
+        desc: IRQA 中断允许
+        values: { "0": "禁止，并清除 SPU2_IRQINFO 中本核心的标志", "1": "允许" }
+      - { bits: "7", name: FX_EN, reset: 0, status: unimplemented, desc: "效果（混响）处理允许。QEMU 不处理声音" }
+      - { bits: "13:8", name: NOISE_CLK, reset: 0, status: unimplemented, desc: 噪声发生器时钟 }
+      - { bits: "14", name: MUTE, reset: 0, status: unimplemented, desc: "静音（PCSX2 中已注释掉，不使用）" }
+      - { bits: "15", name: CORE_EN, reset: 0, status: unimplemented, desc: "核心允许（PCSX2 中已注释掉，含义不确定）" }
+    source:
+      - "PCSX2 pcsx2/SPU2/regs.h:31（REG_C_ATTR）"
+      - "PCSX2 pcsx2/SPU2/spu2sys.cpp:1014-1069"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_write_attr）"
+
+  - name: SPU2_IRQAH
+    addr: 0x1F90019C
+    offset: 0x19C
+    access: R/W
+    reset: 0x0000
+    brief: 中断地址高半字（地址第 19:16 位）
+    desc: >-
+      IRQA 是声音存储器中的一个半字地址（单位为 16 位，范围 0x00000–0xFFFFF）。经数据端口 SPU2_DATA 或
+      DMA 访问到该地址，且 SPU2_ATTR.IRQ_EN = 1 时，SPU2 把 SPU2_IRQINFO 中本核心的标志置 1，并向 IOP INTC
+      发出第 9 号中断。两个核心各有一个 IRQA，任一核心的访问都会与两个核心的 IRQA 比较。
+      IRQAH 保存地址的高位，IRQAL 保存低 16 位。复位后 IRQA = 0x00800。
+    notes:
+      - QEMU 中 IRQA 超出 0xFFFFF（IRQAH 大于 0x000F）时永远不会触发。
+      - 同一核心的标志未清除前不会再次发出中断。
+    source:
+      - "PCSX2 pcsx2/SPU2/regs.h:32（REG_A_IRQA）"
+      - "PCSX2 pcsx2/SPU2/spu2sys.cpp:1057-1067"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_check_irqa）"
+
+  - name: SPU2_IRQAL
+    addr: 0x1F90019E
+    offset: 0x19E
+    access: R/W
+    reset: 0x0800
+    check: "IRQA 的第二个半字，QEMU 按 PS2_SPU2_IRQA + 2 访问"
+    brief: 中断地址低半字（地址第 15:0 位）
+    desc: IRQA 的低 16 位，见 SPU2_IRQAH。
+    source: ["PCSX2 pcsx2/SPU2/regs.h:32", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_addr）"]
+
+  - name: SPU2_KON0
+    addr: 0x1F9001A0
+    offset: 0x1A0
+    access: WO
+    status: verified
+    nodetail: true
+    brief: 键按下（key on），声部 0–15；QEMU 只清除 ENDX 对应位，读出为 0
+    source: ["PCSX2 pcsx2/SPU2/regs.h:34", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_write_core）"]
+
+  - name: SPU2_KON1
+    addr: 0x1F9001A2
+    offset: 0x1A2
+    access: WO
+    status: verified
+    check: "KON 的第二个半字，QEMU 按 PS2_SPU2_KON + 2 访问"
+    nodetail: true
+    brief: 键按下，声部 16–23（第 7:0 位）；QEMU 只清除 ENDX 对应位
+    source: ["PCSX2 pcsx2/SPU2/regs.h:34", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_write_core）"]
+
+  - name: SPU2_KOFF0
+    addr: 0x1F9001A4
+    offset: 0x1A4
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: 键释放（key off），声部 0–15；QEMU 忽略写入，读出为 0
+    source: ["PCSX2 pcsx2/SPU2/regs.h:35", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_write_core）"]
+
+  - name: SPU2_KOFF1
+    addr: 0x1F9001A6
+    offset: 0x1A6
+    access: WO
+    status: unimplemented
+    nodetail: true
+    brief: 键释放，声部 16–23；QEMU 忽略写入，读出为 0
+    source: ["PCSX2 pcsx2/SPU2/regs.h:35", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_write_core）"]
+
+  - name: SPU2_TSAH
+    addr: 0x1F9001A8
+    offset: 0x1A8
+    access: R/W
+    reset: 0x0000
+    brief: 传输起始地址高半字（地址第 19:16 位）
+    desc: >-
+      TSA（transfer start address）是数据端口 SPU2_DATA 与 DMA 在声音存储器中的当前半字地址。
+      经 SPU2_DATA 每读写一个半字，TSA 加 1；一次 DMA 传输后 TSA 前进传输的半字数。TSA 在 0xFFFFF 之后回绕到 0。
+      TSAH 保存地址的高位，TSAL 保存低 16 位。
+    ops:
+      - 写 TSAH = addr >> 16，TSAL = addr & 0xFFFF，然后连续读写 SPU2_DATA，或启动 DMA。
+    source:
+      - "PCSX2 pcsx2/SPU2/regs.h:37（REG_A_TSA）"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_data、ps2_spu2_dma_start）"
+
+  - name: SPU2_TSAL
+    addr: 0x1F9001AA
+    offset: 0x1AA
+    access: R/W
+    reset: 0x0000
+    check: "TSA 的第二个半字，QEMU 按 PS2_SPU2_TSA + 2 访问"
+    brief: 传输起始地址低半字（地址第 15:0 位）
+    desc: TSA 的低 16 位，见 SPU2_TSAH。
+    source: ["PCSX2 pcsx2/SPU2/regs.h:37", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_addr）"]
+
+  - name: SPU2_DATA
+    addr: 0x1F9001AC
+    offset: 0x1AC
+    access: R/W
+    brief: 数据端口：在 TSA 处读写声音存储器一个半字，TSA 加 1
+    desc: >-
+      声音存储器的数据端口。写入时把数据存入 TSA 处，读出时取出 TSA 处的半字；每次访问后 TSA 加 1，
+      在 0xFFFFF 之后回绕。访问的地址等于任一核心的 IRQA 时，按 SPU2_IRQAH 所述发出中断。
+      两个核心共用同一块 2 MB 声音存储器，可以经核心 1 的端口读出核心 0 写入的数据。
+    notes:
+      - 只接受 16 位访问；32 位访问被忽略，TSA 不变。
+    source:
+      - "PCSX2 pcsx2/SPU2/regs.h:38（REG__1AC）"
+      - "PCSX2 pcsx2/SPU2/spu2sys.cpp:991"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_data）"
+
+  - name: SPU2_ADMAS
+    addr: 0x1F9001B0
+    offset: 0x1B0
+    access: R/W
+    reset: 0x0000
+    status: unimplemented
+    brief: 自动 DMA（AutoDMA）控制与状态
+    desc: >-
+      自动 DMA（ADMA）控制。ADMA 把 16 位立体声 PCM 数据流经 DMA 送入声音存储器中的 MEMIN 区
+      （0x2000–0x27FF，每核心左右声道各两个缓冲区），几乎不经 SPU2 的其他处理，常用于播放音乐。
+      QEMU 只保存该寄存器；本核心对应的位为 1 时，写声音存储器方向的 DMA 不传输数据就结束（记录 LOG_UNIMP）。
+    fields:
+      - { bits: "0", name: CORE0, reset: 0, desc: "核心 0 上为 1 表示启动 ADMA 写 / ADMA 忙；在核心 1 上无效" }
+      - { bits: "1", name: CORE1, reset: 0, desc: "同上，只在核心 1 上有效" }
+      - { bits: "2", name: READ, reset: 0, desc: "启动本核心的 ADMA 读；工作方式不明" }
+      - { bits: "15:3", name: 未知, reset: 0, desc: 含义不明 }
+    source:
+      - "ps2tek §SPU2 AutoDMA"
+      - "PCSX2 pcsx2/SPU2/regs.h:40（REG_S_ADMAS）"
+      - "PCSX2 pcsx2/SPU2/spu2sys.cpp:1175"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_dma_start）"
+
+  - name: SPU2_ENDX0
+    addr: 0x1F900340
+    offset: 0x340
+    access: R/W
+    reset: 0xFFFF
+    status: verified
+    nodetail: true
+    brief: 声部结束标志，声部 0–15；QEMU 中任何写入清零，KON 清除对应位
+    source: ["PCSX2 pcsx2/SPU2/regs.h:75（REG_S_ENDX）", "PCSX2 pcsx2/SPU2/spu2sys.cpp:1167", "QEMU hw/audio/ps2_spu2.c"]
+
+  - name: SPU2_ENDX1
+    addr: 0x1F900342
+    offset: 0x342
+    access: R/W
+    reset: 0x00FF
+    status: verified
+    check: "ENDX 的第二个半字，QEMU 按 PS2_SPU2_ENDX + 2 访问"
+    nodetail: true
+    brief: 声部结束标志，声部 16–23（第 7:0 位）
+    source: ["PCSX2 pcsx2/SPU2/regs.h:75", "QEMU hw/audio/ps2_spu2.c"]
+
+  - name: SPU2_STATX
+    addr: 0x1F900344
+    offset: 0x344
+    access: R/W
+    reset: 0x0080
+    brief: 核心状态：DMA 就绪、忙（核心 1：0x1F900744）
+    desc: >-
+      核心状态寄存器。QEMU 使用其中两位：READY（第 7 位）在复位时为 1；每次 DMA 开始时清零，结束时若
+      SPU2_ATTR.DMA_MODE 不为 0 则置 1。BUSY（第 10 位）在 DMA 结束时清零；它为 1 时把 DMA_MODE 写为 0
+      不会清除 READY。软件可以直接写该寄存器。
+    fields:
+      - { bits: "6:0", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "7", name: READY, reset: 1, desc: "DMA 就绪 / 传输结束" }
+      - { bits: "9:8", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "10", name: BUSY, reset: 0, desc: "传输忙。QEMU 只在 DMA 结束时清零，从不置 1" }
+      - { bits: "15:11", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+    notes:
+      - PCSX2 把该寄存器注释为“Status register?”，位的命名为本书依据 QEMU 与 PCSX2 的行为归纳。
+    source:
+      - "PCSX2 pcsx2/SPU2/regs.h:77（REG_P_STATX）"
+      - "PCSX2 pcsx2/SPU2/spu2sys.cpp:1039-1042"
+      - "PCSX2 pcsx2/SPU2/Dma.cpp:223"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_write_attr、ps2_spu2_dma_start）"
+
+  - name: SPU2_MMIX
+    addr: 0x1F900198
+    offset: 0x198
+    access: R/W
+    reset: 0x0FF0
+    status: unimplemented
+    nodetail: true
+    brief: 声部混合后的输出选择；复位值核心 0 为 0x0FF0、核心 1 为 0x0FFC，QEMU 只保存
+    source: ["PCSX2 pcsx2/SPU2/regs.h:30（REG_P_MMIX）", "QEMU hw/audio/ps2_spu2.c（ps2_spu2_reset_hold）"]
+
+  - name: SPU2_IRQINFO
+    addr: 0x1F9007C2
+    offset: 0x7C2
+    access: R/W
+    reset: 0x0000
+    brief: 中断来源：哪个核心的 IRQA 被访问（两核心共用）
+    desc: >-
+      SPU2 中断来源寄存器，两个核心共用一个，位于 SPDIF 寄存器区。核心 n 的 IRQA 被访问并发出中断时，
+      第 2 + n 位置 1。中断处理程序处理后应写 0 清除（QEMU 中写入值直接保存）；把 SPU2_ATTR.IRQ_EN
+      由 1 写为 0 也会清除该核心的位。
+    fields:
+      - { bits: "1:0", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+      - { bits: "2", name: CORE0, reset: 0, desc: 核心 0 的 IRQA 中断 }
+      - { bits: "3", name: CORE1, reset: 0, desc: 核心 1 的 IRQA 中断 }
+      - { bits: "15:4", name: 未知, reset: 0, status: unimplemented, desc: 含义不明 }
+    source:
+      - "PCSX2 pcsx2/SPU2/regs.h:116（SPDIF_IRQINFO）"
+      - "PCSX2 pcsx2/SPU2/spu2sys.cpp:1062-1063"
+      - "QEMU hw/audio/ps2_spu2.c（ps2_spu2_irq）"
