@@ -33,6 +33,10 @@ node scripts/check-addr.mjs   # 已验证寄存器地址与 QEMU 源码对照（
 
 `.github/workflows/deploy.yml` 在推送到 `main` 分支时构建并发布到 GitHub Pages；仓库设置中需把 Pages 的来源设为 GitHub Actions。
 
+## 许可
+
+本仓库的文字、插图与脚本采用 BSD 3-Clause 许可，见 [LICENSE](LICENSE)。`docs/public/img/fig15-3-osdsys-qemu.png`、`fig15-4-osdsys-pcsx2.png` 为 Sony BIOS 菜单画面截图，画面内容的权利归 Sony 所有，不在本许可范围内。
+
 ## 声明
 
 本手册未使用任何 NDA 文档内容。PlayStation 为 Sony Interactive Entertainment Inc. 的商标，本手册与其无关。

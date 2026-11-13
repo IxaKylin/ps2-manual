@@ -1,6 +1,7 @@
 {
   "name": "ps2-manual",
   "private": true,
+  "license": "BSD-3-Clause",
   "type": "module",
   "scripts": {
     "gen": "node scripts/gen-memmap.mjs && node scripts/gen-index.mjs",
