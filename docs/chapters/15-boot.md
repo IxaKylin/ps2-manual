@@ -86,7 +86,7 @@ qtest `ps2/prid-split` 用一个小 ROM 验证：两颗 CPU 都从 `0xBFC00000` 
 
 EE 的启动顺序如下，括号或引号中是 QEMU 运行 SCPH-39001 时的串口输出与跟踪记录 <Status s="verified" />：
 
-1. **暂存存储器与栈**：写 TLB 第 0 项，EntryHi = `0x70000000`、EntryLo0 = `0x80000007`（S 位为 1），把 16 KB 暂存存储器映射到虚拟地址 `0x70000000`，栈指针设为 `0x70004000`。此时主存尚未初始化，引导代码只能用暂存存储器作栈（[2.1 节](/chapters/02-memory-map#暂存存储器)）。
+1. **暂存存储器与栈**：写 TLB 第 0 项，EntryHi = `0x70000000`、EntryLo0 = `0x80000007`（S 位为 1），把 16 KB 暂存存储器映射到虚拟地址 `0x70000000`，栈指针设为 `0x70004000`。此时主存尚未初始化，引导代码只能用暂存存储器作栈（[2.1.7 节](/chapters/02-memory-map#_2-1-7-暂存存储器)）。
 2. **测量时钟**：串口输出“# Initialize memory (rev:3.63, ctm:393Mhz, cpuclk:295Mhz detected)”。按 ps2tek，SCPH-39001 用定时器计数 HBLANK 来测量 EE 时钟 <Status s="reference" />。
 3. **主存初始化**：InitRDRAM 经 MCH 的 MCH_RICM（`0x1000F430`）与 MCH_DRD（`0x1000F440`）配置 RDRAM，串口输出“# Total accessable memory size: 32 MB”。
 4. **EE 内核**：按 ps2tek，内核复制到虚拟地址 `0x80000000` 起，入口为 `0x80001000` <Status s="reference" />。内核设置 TLB（串口输出“# TLB spad=0 kernel=1:12 default=13:30 extended=31:38”），然后依次初始化 GS、INTC、TIMER、DMAC、VU1、VIF1、GIF、VU0、VIF0、IPU、FPU、用户主存与暂存存储器，最后输出“# Initialize Done.”。

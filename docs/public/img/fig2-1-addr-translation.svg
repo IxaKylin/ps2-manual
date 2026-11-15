@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" width="960" height="720" font-family="'Noto Sans SC','Microsoft YaHei','PingFang SC',sans-serif">
+  <style>
+    .t{font-size:20px;font-weight:700;fill:#1d2733}
+    .h{font-size:15px;font-weight:700;fill:#1d2733}
+    .n{font-size:13px;fill:#1d2733}
+    .s{font-size:11px;fill:#4a5260}
+    .b{font-size:11px;fill:#5a3d00;font-weight:600}
+    .ee{fill:#eaf2fc;stroke:#2f6fb2;stroke-width:2}
+    .mem{fill:#fdf0dc;stroke:#c07a1a;stroke-width:2}
+    .cpu{fill:#f1eafb;stroke:#7a4bb3;stroke-width:2}
+    .dec{fill:#ffffff;stroke:#2f6fb2;stroke-width:1.5}
+    .ext{fill:#f4f5f7;stroke:#8a8f96;stroke-width:1.5;stroke-dasharray:5 3}
+    .ln{stroke:#3a4250;stroke-width:2;fill:none}
+    .dl{stroke:#8a8f96;stroke-width:1.5;fill:none;stroke-dasharray:5 3}
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#3a4250"/>
+    </marker>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#8a8f96"/>
+    </marker>
+  </defs>
+  <rect width="960" height="720" fill="#ffffff"/>
+  <text x="24" y="34" class="t">图 2-1 MIPS32 虚拟地址转换</text>
+  <text x="24" y="58" class="s">实线箭头为转换路径；虚线箭头表示产生异常。</text>
+
+  <!-- 虚拟地址与权限检查 -->
+  <rect x="200" y="72" width="400" height="50" rx="6" class="cpu"/>
+  <text x="400" y="94" class="h" text-anchor="middle">虚拟地址 VA[31:0]</text>
+  <text x="400" y="112" class="s" text-anchor="middle">按 VA[31:29] 选段</text>
+  <line x1="400" y1="122" x2="400" y2="142" class="ln" marker-end="url(#a)"/>
+  <rect x="200" y="144" width="400" height="44" rx="6" class="dec"/>
+  <text x="400" y="171" class="n" text-anchor="middle">当前运行模式可以访问该段？</text>
+
+  <polyline points="600,166 740,166" class="dl" marker-end="url(#g)"/>
+  <text x="670" y="160" class="b" text-anchor="middle">否</text>
+
+  <polyline points="300,188 300,208 170,208 170,234" class="ln" marker-end="url(#a)"/>
+  <polyline points="500,188 500,208 520,208 520,234" class="ln" marker-end="url(#a)"/>
+  <text x="410" y="204" class="b" text-anchor="middle">是</text>
+
+  <!-- 非映射段 -->
+  <rect x="40" y="236" width="260" height="104" rx="6" class="mem"/>
+  <text x="170" y="260" class="h" text-anchor="middle">KSEG0、KSEG1</text>
+  <text x="170" y="284" class="n" text-anchor="middle">PA = VA &amp; 0x1FFFFFFF</text>
+  <text x="170" y="306" class="s" text-anchor="middle">KSEG0：缓存方式由 Config.K0 决定</text>
+  <text x="170" y="324" class="s" text-anchor="middle">KSEG1：不缓存</text>
+
+  <!-- 映射段 -->
+  <rect x="340" y="236" width="360" height="92" rx="6" class="ee"/>
+  <text x="520" y="258" class="h" text-anchor="middle">KUSEG、SSEG、KSEG3：查 TLB</text>
+  <text x="520" y="280" class="n" text-anchor="middle">所有项同时比较，匹配条件：</text>
+  <text x="520" y="300" class="s" text-anchor="middle">VA 的页号与 VPN2 相等（PageMask 屏蔽的位不比较）</text>
+  <text x="520" y="318" class="s" text-anchor="middle">且 G = 1 或项的 ASID 等于 EntryHi.ASID</text>
+
+  <polyline points="700,282 740,282" class="dl" marker-end="url(#g)"/>
+  <text x="720" y="276" class="b" text-anchor="middle">无匹配</text>
+
+  <line x1="520" y1="328" x2="520" y2="356" class="ln" marker-end="url(#a)"/>
+  <rect x="340" y="358" width="360" height="56" rx="6" class="ee"/>
+  <text x="520" y="380" class="n" text-anchor="middle">按页大小取 VA 的奇偶位，选择偶数页或奇数页</text>
+  <text x="520" y="400" class="s" text-anchor="middle">0：PFN0、C0、D0、V0　1：PFN1、C1、D1、V1</text>
+
+  <line x1="520" y1="414" x2="520" y2="436" class="ln" marker-end="url(#a)"/>
+  <rect x="420" y="438" width="200" height="40" rx="6" class="dec"/>
+  <text x="520" y="463" class="n" text-anchor="middle">V = 0？</text>
+  <polyline points="620,458 740,458" class="dl" marker-end="url(#g)"/>
+  <text x="680" y="452" class="b" text-anchor="middle">是</text>
+
+  <line x1="520" y1="478" x2="520" y2="504" class="ln" marker-end="url(#a)"/>
+  <text x="530" y="496" class="b">否</text>
+  <rect x="420" y="506" width="200" height="40" rx="6" class="dec"/>
+  <text x="520" y="531" class="n" text-anchor="middle">写操作且 D = 0？</text>
+  <polyline points="620,526 740,526" class="dl" marker-end="url(#g)"/>
+  <text x="680" y="520" class="b" text-anchor="middle">是</text>
+
+  <line x1="520" y1="546" x2="520" y2="572" class="ln" marker-end="url(#a)"/>
+  <text x="530" y="564" class="b">否</text>
+  <rect x="340" y="574" width="360" height="50" rx="6" class="ee"/>
+  <text x="520" y="596" class="n" text-anchor="middle">PA = PFN 与页内偏移拼接</text>
+  <text x="520" y="614" class="s" text-anchor="middle">缓存方式取 C 字段</text>
+
+  <!-- 结果 -->
+  <line x1="170" y1="340" x2="170" y2="652" class="ln" marker-end="url(#a)"/>
+  <line x1="520" y1="624" x2="520" y2="652" class="ln" marker-end="url(#a)"/>
+  <rect x="40" y="654" width="660" height="44" rx="6" class="cpu"/>
+  <text x="370" y="681" class="h" text-anchor="middle">物理地址 PA 与缓存方式</text>
+
+  <!-- 异常 -->
+  <rect x="742" y="144" width="194" height="46" rx="6" class="ext"/>
+  <text x="839" y="164" class="n" text-anchor="middle">地址错误</text>
+  <text x="839" y="181" class="s" text-anchor="middle">AdEL（取指、读）/ AdES（写）</text>
+
+  <rect x="742" y="258" width="194" height="46" rx="6" class="ext"/>
+  <text x="839" y="278" class="n" text-anchor="middle">TLB 重填</text>
+  <text x="839" y="295" class="s" text-anchor="middle">TLBL / TLBS</text>
+
+  <rect x="742" y="435" width="194" height="46" rx="6" class="ext"/>
+  <text x="839" y="455" class="n" text-anchor="middle">TLB 无效</text>
+  <text x="839" y="472" class="s" text-anchor="middle">TLBL / TLBS</text>
+
+  <rect x="742" y="503" width="194" height="46" rx="6" class="ext"/>
+  <text x="839" y="523" class="n" text-anchor="middle">TLB 修改</text>
+  <text x="839" y="540" class="s" text-anchor="middle">Mod</text>
+
+  <!-- legend -->
+  <rect x="742" y="610" width="28" height="16" rx="3" class="mem"/>
+  <text x="778" y="623" class="s">非映射段</text>
+  <rect x="742" y="636" width="28" height="16" rx="3" class="ee"/>
+  <text x="778" y="649" class="s">映射段（查 TLB）</text>
+  <rect x="742" y="662" width="28" height="16" rx="3" class="ext"/>
+  <text x="778" y="675" class="s">异常</text>
+</svg>

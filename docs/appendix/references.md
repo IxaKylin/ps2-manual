@@ -129,4 +129,5 @@ QEMU 建模记录 `ps2-model.md`（项目内部记录，未随本手册发布）
 | frno7/linux（Fredrik Noring 的 PS2 Linux 移植，基于 Linux 5.4，<https://github.com/frno7/linux>） | 开源内核移植，GPLv2 | 精简 BIOS 需要提供的 SIF 握手与 RPC 服务（`sif_init` 的命令顺序、HEAP、LOADFILE）；EE SIO 作为控制台、以查询方式工作；作为“经 Linux 启动验证”的被测软件 | [第 11 章](/chapters/11-sif)、[第 14 章](/chapters/14-peripherals)、[第 15 章](/chapters/15-boot)、[第 16 章](/chapters/16-linux) |
 | Rodrigo Copetti，[《PlayStation 2 架构》](https://www.copetti.org/zh-hans/writings/consoles/playstation-2/) | 架构科普文章 | 本手册的章节结构参照该文；插图全部重新绘制 | [第 1 章](/chapters/01-overview) |
 | *Open Host Controller Interface Specification for USB*，Release 1.0a | USB 主控制器的公开规范 | IOP 一侧 USB 主控制器（OHCI）的寄存器定义，本手册不重复列出 | [第 14 章](/chapters/14-peripherals) |
+| *MIPS Architecture For Programmers Vol. III: MIPS32/microMIPS32 Privileged Resource Architecture*，Rev 6.02，文档号 MD00090（<https://www.cipunited.com/xlx/files/document/202008/1205381395470.pdf>） | MIPS 官方架构规范（英文） | 虚拟地址分段、各运行模式的访问权限、KSEG0/KSEG1 的地址转换与缓存属性、固定映射 MMU、段控制寄存器的经典布局复位值 | [第 2 章](/chapters/02-memory-map) |
 | IEEE 754 | 浮点数标准 | 说明 R5900 COP1 与 VU 的浮点格式及其与标准的差异 | [第 3 章](/chapters/03-ee-core)、[第 7 章](/chapters/07-vpu) |

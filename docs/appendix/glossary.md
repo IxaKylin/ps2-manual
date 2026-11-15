@@ -73,7 +73,9 @@
 | IRX | IRX 模块 | 在 IOP 上运行的驱动模块，如 cdvdman、sifman | [第 12 章](/chapters/12-iop) |
 | JST | 日本标准时间 | MechaCon RTC 采用的时间（UTC+9） | [第 13 章](/chapters/13-cdvd) |
 | KON、KOFF | 键按下、键释放 | SPU2 开始与停止声部发声的寄存器 | [第 14 章](/chapters/14-peripherals) |
-| KSEG0、KSEG1 | KSEG0、KSEG1 | MIPS 内核地址段，都直接映射到物理地址：KSEG0 经缓存，KSEG1 不经缓存 | [第 2 章](/chapters/02-memory-map) |
+| KSEG0、KSEG1 | KSEG0、KSEG1 | MIPS 内核地址段，都直接映射到物理地址的最低 512 MB：KSEG0 经缓存，KSEG1 不经缓存 | [第 2 章](/chapters/02-memory-map) |
+| KSEG2 | KSEG2 | R3000 对 `0xC0000000`–`0xFFFFFFFF` 的称呼，MIPS32 分为 SSEG 与 KSEG3；IOP 中不经转换 | [第 2 章](/chapters/02-memory-map) |
+| KUSEG | KUSEG | MIPS 用户地址段 `0x00000000`–`0x7FFFFFFF`，经 TLB 转换，用户态可访问 | [第 2 章](/chapters/02-memory-map) |
 | lite-bios | 精简 BIOS | QEMU 自带的 `pc-bios/ps2-lite-bios`，在 EE 与真实 R3000A IOP 上运行，用于引导 Linux ELF | [第 1 章](/chapters/01-overview) |
 | LOADCORE | LOADCORE | IOP 的 IRX 加载与链接模块 | [第 15 章](/chapters/15-boot) |
 | Local memory | 本地存储器 | GS 片上 4 MB 嵌入式 DRAM，由帧缓冲、Z 缓冲、纹理与 CLUT 共用 | [第 7 章](/chapters/07-vpu) |

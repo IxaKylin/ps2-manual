@@ -84,10 +84,38 @@ IOP 核心执行 MIPS I 指令集，与 EE 的 R5900（第 3 章）相比差别�
 
 ### 12.2.2 异常与中断
 
-R3000A 没有 EXL 位，用 SR 第 5:0 位保存三级 KU/IE：
+R3000A 没有 EXL 位，SR 第 5:0 位构成三级 KU/IE 栈。IE 为中断允许位，KU 为内核/用户态位；后缀 c、p、o 分别表示当前级（current）、上一级（previous）与更早一级（old）。
 
-- **进入异常**：SR 第 5:0 位整体左移 2 位，当前级（KUc、IEc）清零，即进入内核态并关中断；CPU 写 EPC、CAUSE.ExcCode 与 CAUSE.BD，跳到异常向量。
-- **返回**：RFE 指令把 SR 第 5:2 位右移到第 3:0 位，恢复上一级状态，KUo、IEo 保持不变。RFE 本身不跳转，惯用写法是在 `jr k1` 的延迟槽中执行 `rfe`。
+| 位 | 名称 | 说明 |
+|---|---|---|
+| 0 | IEc | 中断允许：0 = 禁止，1 = 允许 |
+| 1 | KUc | 运行模式：0 = 内核态，1 = 用户态 |
+| 2 | IEp | 上一级的 IEc |
+| 3 | KUp | 上一级的 KUc |
+| 4 | IEo | 更早一级的 IEc |
+| 5 | KUo | 更早一级的 KUc |
+
+只有 KUc、IEc 影响 CPU 的行为：KUc = 1 时不能执行 COP0 指令（CU0 = 0 时）与访问 KSEG0、KSEG1、KSEG2（2.1.2 节）；IEc = 0 时不响应中断。其余四位只保存状态。
+
+- **进入异常**：SR 第 5:0 位左移 2 位，`SR = (SR & ~0x3F) | ((SR << 2) & 0x3C)`。KUc、IEc 清零，即进入内核态并禁止中断；原 KUo、IEo 丢失。CPU 同时写 EPC、CAUSE.ExcCode 与 CAUSE.BD，转到异常向量。
+- **返回**：RFE 把 SR 第 5:2 位右移到第 3:0 位，`SR = (SR & ~0xF) | ((SR >> 2) & 0xF)`。KUo、IEo 不变。RFE 不跳转，通常放在 `jr k1` 的延迟槽中执行（12.9.1 节）。
+
+嵌套异常时 SR 第 5:0 位的变化如下，位序为 KUo IEo KUp IEp KUc IEc：
+
+| 步骤 | 事件 | SR[5:0] | 当前状态 |
+|---|---|---|---|
+| 1 | 用户程序运行 | `0x03` | 用户态，允许中断 |
+| 2 | 中断，压栈 | `0x0C` | 内核态，禁止中断 |
+| 3 | 保存 SR 前再次发生异常，压栈 | `0x30` | 内核态，禁止中断 |
+| 4 | RFE | `0x3C` | 同步骤 2 |
+| 5 | RFE | `0x3F` | 同步骤 1 |
+
+- 硬件最多保存两级。处理程序在重新允许中断之前，须把 SR 与 EPC 保存到存储器。
+- RFE 不清除 KUo、IEo，步骤 5 之后第 5:2 位为旧值，不影响运行。
+
+R5900 使用 Status.EXL，不使用 KU/IE 栈：进入异常时置 EXL，ERET 清 EXL 并转到 EPC；EXL = 1 时发生的异常不更新 EPC（第 3 章 3.5.2 节）。
+
+<Status s="verified" /> QEMU 中进入异常由 `target/mips/tcg/system/tlb_helper.c`（`r3000_enter_exception`）实现，RFE 由 `target/mips/tcg/system/special_helper.c`（`helper_rfe`）实现；qtest `r3000a/cpu` 检查 SYSCALL 与中断进入时的压栈结果。
 
 中断只有 IP2 一路来自硬件，即 IOP INTC 的输出（12.3 节）。CPU 响应中断的条件为 SR.IEc = 1 且 CAUSE.IP 与 SR.IM 有同为 1 的位。IP0、IP1 是软件中断，写 CAUSE 第 9:8 位产生。
 

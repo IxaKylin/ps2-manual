@@ -1,7 +1,7 @@
 # 存储器映射示意图数据，由 scripts/gen-memmap.mjs 绘制成 docs/public/img/memmap-*.svg。
 # kind: ram / rom / io / gfx / iop / alias / unimp / gap
 - id: ee-physical
-  title: 图 2-1 EE 物理地址空间
+  title: 图 2-2 EE 物理地址空间
   legend:
     - { kind: ram, text: RAM }
     - { kind: io, text: EE 寄存器 }
@@ -30,7 +30,7 @@
     - { start: 0x1FC00000, size: 0x00400000, kind: rom, name: "ROM0（BIOS）", note: "复位向量 0xBFC00000（KSEG1）" }
 
 - id: ee-registers
-  title: 图 2-2 EE 寄存器区（0x10000000–0x1000FFFF）
+  title: 图 2-3 EE 寄存器区（0x10000000–0x1000FFFF）
   legend:
     - { kind: io, text: 已建模 }
     - { kind: gfx, text: 图形相关 }
@@ -54,7 +54,7 @@
     - { start: 0x1000F500, size: 0x0100, kind: io, name: "DMAC 使能", note: "D_ENABLER（+0x20）、D_ENABLEW（+0x90）" }
 
 - id: iop-physical
-  title: 图 2-3 IOP 物理地址空间
+  title: 图 2-4 IOP 物理地址空间
   legend:
     - { kind: ram, text: RAM }
     - { kind: iop, text: IOP 寄存器 }
